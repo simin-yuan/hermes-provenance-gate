@@ -81,26 +81,56 @@ def _split_segment(segment: str) -> list[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 
+_STARTS_BLOCK = re.compile(r"^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+")
+_WRAP_TAIL = re.compile(r"(?:\b(?:the|user|owner|has|had|already|explicitly)|用户|用戶|主人|老板|老闆)\s*$", re.IGNORECASE)
+
+
+def _continues(previous: str, raw: str) -> bool:
+    """``raw`` continues ``previous`` as one hard-wrapped sentence: it is indented by one to three
+    spaces, or ``previous`` stops right after a subject word ("... the user")."""
+    if previous.rstrip().endswith(tuple(_ASCII_ENDS + _CJK_ENDS)):
+        return False
+    return bool(re.match(r"^ {1,3}\S", raw)) or bool(_WRAP_TAIL.search(previous))
+
+
 def split_sentences(text: str) -> list[Sentence]:
     """Lines first (CRLF and CR count as line ends), then sentences. Lines inside a fenced code
-    block or indented by four spaces / a tab are CODE; Markdown table rows are TABLE. Markdown list,
-    heading and blockquote markers are removed from prose lines."""
+    block or indented by four spaces / a tab are CODE; Markdown table rows are TABLE. Consecutive
+    prose lines of one paragraph are joined before splitting, so a hard-wrapped sentence ("the
+    user\n  decided ...") is seen whole; a list item, heading or blockquote line starts a new
+    paragraph, and its markers are removed."""
     out: list[Sentence] = []
     in_fence = False
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            out.extend(Sentence(s, PROSE) for s in _split_segment(" ".join(buffer)))
+            buffer.clear()
+
     for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         if _FENCE.match(raw):
+            flush()
             in_fence = not in_fence
             continue
         if not raw.strip():
+            flush()
             continue
         if in_fence or _INDENTED.match(raw):
+            flush()
             out.append(Sentence(raw.strip(), CODE))
             continue
         line = _LINE_MARKER.sub("", raw).strip()
         if line.startswith("|"):
+            flush()
             out.append(Sentence(line, TABLE))
             continue
-        out += [Sentence(s, PROSE) for s in _split_segment(line)]
+        if buffer and not _STARTS_BLOCK.match(raw) and _continues(buffer[-1], raw):
+            buffer.append(line)  # a hard-wrapped continuation of the previous line
+            continue
+        flush()
+        buffer.append(line)
+    flush()
     return out
 
 
@@ -186,7 +216,7 @@ def _en_subject_ok(text: str, match: re.Match, phrase: bool) -> bool:
     clause_words = _clause_words_before(text, start)
     if any(w in patterns.EN_GENERIC_CONTEXT for w in clause_words):
         return False
-    if any(w in patterns.EN_REPORTED_VERBS for w in clause_words):
+    if any(w in patterns.EN_REPORTED_VERBS for w in clause_words[1:]):
         return False  # a source reports it: "Docs say the user decided ..."
     after = _WORD.findall(text[match.end():match.end() + 40])
     if after and after[0].lower().rstrip(".") in patterns.EN_FIELD_NOUNS:

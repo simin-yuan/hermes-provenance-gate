@@ -68,8 +68,8 @@ EN_SPEC_LABELS = (
 )
 # Earlier in the same clause, one of these reports what a source says: "Upstream issue #4411 says
 # the owner approved ...", "Docs say the user decided ...", "Error E401 means the user rejected ...".
-EN_REPORTED_VERBS = frozenset({"says", "say", "said", "states", "state", "reports", "reported", "claims",
-                               "means", "mentions", "notes", "explains", "describes", "documents", "shows"})
+EN_REPORTED_VERBS = frozenset({"says", "say", "said", "states", "reported", "means", "mentions", "explains",
+                               "describes"})
 # A sentence starting with this word (Gherkin) is a specification step.
 EN_SPEC_STARTS = ("given",)
 

@@ -60,3 +60,11 @@ def test_crlf_and_cr_line_endings():
 def test_find_claims_returns_each_claim_sentence():
     text = "Env: Ubuntu 24.04.\nThe user decided to use uv. The owner approved the budget. Done."
     assert [c.pattern for c in find_claims(text)] == ["decided", "approved"]
+
+
+def test_hard_wrapped_sentence_is_joined():
+    from provenance_gate.claims import find_claims, split_sentences
+    text = "Notes from today: the user\n  decided to ship on Friday.\n\nNext paragraph."
+    assert [s.text for s in split_sentences(text)][0].endswith("the user decided to ship on Friday.")
+    assert find_claims(text)
+    assert [s.text for s in split_sentences("- one item\n- the user\n  approved it")] == ["one item", "the user approved it"]
