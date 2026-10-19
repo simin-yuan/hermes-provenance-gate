@@ -26,10 +26,22 @@ def test_apostrophes_are_not_quotes():
     assert quotes.extract_quotes("he wrote 'don't ship it today' twice") == ["don't ship it today"]
 
 
+def test_inch_marks_pair_up_as_a_span():
+    text = 'Monitor is 27" wide. The user approved it. Cable is 6" long.'
+    assert quotes.extract_quotes(text) == [" wide. The user approved it. Cable is 6"]
+
+
+def test_remove_spans():
+    text = 'A ("one two") B “three” C'
+    spans = quotes.quote_spans(text)
+    assert quotes.remove_spans(text, spans[:1]) == "A ( Q ) B “three” C"
+
+
 def test_normalization():
     assert quotes.normalize("  Ship\tIt\n NOW ") == "ship it now"
     assert quotes.normalize("ＳＨＩＰ　ｉｔ") == "ship it"  # NFKC: full-width letters and space
     assert quotes.normalize("it’s “done”") == quotes.normalize("it's \"done\"")
+    assert quotes.normalize("ap\u00adpro\u200bved") == "approved"
     assert quotes.normalize_quote("We ship on Friday!!") == "we ship on friday"
     assert quotes.normalize_quote("周五发布。") == "周五发布"
 
@@ -62,24 +74,36 @@ def test_quote_size():
     assert quotes.quote_size("用 uv 吧") == 3
 
 
-def _rows(*texts):
-    return [{"text": t, "msg_id": str(i)} for i, t in enumerate(texts)]
+def _messages(*texts):
+    return quotes.Messages([{"text": t, "msg_id": str(i)} for i, t in enumerate(texts)])
 
 
-def test_match_long_quote():
-    assert quotes.match("we ship on Friday", _rows("ok", "I decided we ship on Friday."))[0] == "found"
-    assert quotes.match("we ship on Monday", _rows("I decided we ship on Friday."))[0] == "not_found"
+def test_messages_find_long_quote():
+    assert _messages("ok", "I decided we ship on Friday.").find("we ship on Friday")[0] == "found"
+    assert _messages("I decided we ship on Friday.").find("we ship on Monday")[0] == "not_found"
 
 
-def test_short_quote_must_equal_whole_message():
-    assert quotes.match("yes", _rows("Yes!"))[0] == "found"
-    assert quotes.match("好", _rows("好"))[0] == "found"
-    assert quotes.match("go ahead", _rows("Go ahead."))[0] == "found"
-    assert quotes.match("yes", _rows("yes, but only after the tests pass"))[0] == "too_short"
-    assert quotes.match("好", _rows("好的，不过先跑测试"))[0] == "too_short"
-    assert quotes.match("yes", _rows("no"))[0] == "not_found"
+def test_messages_find_whole_only():
+    assert _messages("Yes!").find("yes", whole_only=True)[0] == "found"
+    assert _messages("好").find("好", whole_only=True)[0] == "found"
+    assert _messages("yes, but only after the tests pass").find("yes", whole_only=True)[0] == "inside"
+    assert _messages("no").find("yes", whole_only=True)[0] == "not_found"
 
 
-def test_match_prefers_first_row_given():
-    status, row = quotes.match("ship on Friday now", _rows("ship on Friday now", "ship on Friday now"))
+def test_messages_prefer_first_row():
+    status, row = _messages("ship on Friday now", "ship on Friday now").find("ship on Friday now")
     assert status == "found" and row["msg_id"] == "0"
+
+
+def test_content_tokens():
+    assert quotes.content_tokens("I decided we ship on Friday") == {"decided", "ship", "friday"}
+    assert quotes.content_tokens("The user approved it, yes") == {"approved"}
+    assert quotes.content_tokens("就周五发布吧") == {"就周", "周五", "五发", "发布", "布吧"}
+    assert "用户" not in quotes.content_tokens("用户决定")
+
+
+def test_related():
+    assert quotes.related("I decided we ship on Friday", 'User decided to ship on Friday ( Q )')
+    assert not quotes.related("can you look at the logs for me", "The user approved deleting the prod database ( Q )")
+    assert quotes.related("就周五发布吧", "用户决定周五发布（用户原话： Q ）。")
+    assert not quotes.related("ship it", "User decided to ship ( Q )")  # one shared token is not enough

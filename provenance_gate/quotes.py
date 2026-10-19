@@ -1,26 +1,32 @@
-"""Quoted spans in written text, and verbatim matching against what the user said.
+"""Quoted spans in written text, verbatim matching against what the user typed, and the content
+tokens that tie a quote to its claim.
 
 Quote styles: "…", “…”, '…' and ‘…’ (single quotes only around two or more words), 「…」, 『…』.
 Matching NFKC-normalizes both sides, collapses whitespace, case-folds, treats straight and curly
 quotes alike and ignores trailing punctuation of the quote. Nothing else is forgiven: no fuzzy
-or partial-word matching.
+or partial-word matching. Every scan here is linear in the length of the text.
 """
 
 from __future__ import annotations
 
+import bisect
 import re
 import unicodedata
-from typing import Iterable
 
-_DOUBLE = re.compile(r'["“„]([^"“”„\n]+?)["”“]')
-_SINGLE = re.compile(r"(?<!\w)['‘]((?:[^'‘’\n]|(?<=\w)['’](?=\w))+?)['’](?!\w)")
-_CORNER = re.compile(r"「([^「」]+)」")
-_WHITE_CORNER = re.compile(r"『([^『』]+)』")
-_BACKTICK = re.compile(r"`[^`\n]*`")
+from . import patterns
+
+_DOUBLE_QUOTES = '"“”„'
+_SINGLE_OPEN = "'‘"
+_SINGLE_CLOSE = "'’"
+_CORNERS = (("「", "」"), ("『", "』"))
 
 _QUOTE_FOLD = str.maketrans({"“": '"', "”": '"', "„": '"', "‘": "'", "’": "'"})
 _TRAILING_PUNCT = re.compile(r"[\s.,!?;:。，！？；：、…]+$")
 _WS = re.compile(r"\s+")
+# Zero-width characters, the soft hyphen and the BOM are invisible and only ever hide words.
+_INVISIBLE = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"))
+_LATIN_WORD = re.compile(r"[^\W\d_]+")
+_SPACE_INSIDE = re.compile(r"\S\s+\S")
 
 SHORT_QUOTE_LIMIT = 4  # words (Latin) or characters (CJK)
 
@@ -35,37 +41,100 @@ def _word_char(ch: str) -> bool:
     return ch.isalnum() and not is_cjk(ch)
 
 
+def detection_form(text: str) -> str:
+    """Text as claim detection sees it: NFKC (folds full-width letters) without invisible characters."""
+    return unicodedata.normalize("NFKC", text).translate(_INVISIBLE)
+
+
+# --- spans ---------------------------------------------------------------------------------
+
+_DOUBLE_RE = re.compile('["“”„]')
+_SINGLE_RE = re.compile("['‘’]")
+_NEWLINE_RE = re.compile("\n")
+_CJK_RE = re.compile("[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff\U00020000-\U0002fa1f]+")
+
+
+def _double_spans(text: str, newlines: list[int]) -> list[tuple[int, int, str]]:
+    positions = [m.start() for m in _DOUBLE_RE.finditer(text)]
+    spans, k = [], 0
+    while k + 1 < len(positions):
+        a, b = positions[k], positions[k + 1]
+        if b > a + 1 and not _has_newline(newlines, a, b):
+            spans.append((a, b + 1, text[a + 1:b]))
+            k += 2
+        else:
+            k += 1
+    return spans
+
+
+def _single_spans(text: str, newlines: list[int]) -> list[tuple[int, int, str]]:
+    """Pairs of single quotes that are not apostrophes inside a word, around two or more words."""
+    n = len(text)
+    positions = [i for i in (m.start() for m in _SINGLE_RE.finditer(text))
+                 if not (0 < i < n - 1 and _word_char(text[i - 1]) and _word_char(text[i + 1]))]
+    spans, k = [], 0
+    while k + 1 < len(positions):
+        a, b = positions[k], positions[k + 1]
+        opener_ok = text[a] in _SINGLE_OPEN and (a == 0 or not _word_char(text[a - 1]))
+        closer_ok = text[b] in _SINGLE_CLOSE and (b + 1 == n or not _word_char(text[b + 1]))
+        inner = text[a + 1:b]
+        if opener_ok and closer_ok and not _has_newline(newlines, a, b) and _SPACE_INSIDE.search(inner.strip()):
+            spans.append((a, b + 1, inner))
+            k += 2
+        else:
+            k += 1
+    return spans
+
+
+def _corner_spans(text: str) -> list[tuple[int, int, str]]:
+    spans = []
+    for opener, closer in _CORNERS:
+        start = text.find(opener)
+        while start != -1:
+            end = text.find(closer, start + 1)
+            if end == -1:
+                break
+            if end > start + 1:
+                spans.append((start, end + 1, text[start + 1:end]))
+            start = text.find(opener, end + 1)
+    return spans
+
+
+def _has_newline(newlines: list[int], a: int, b: int) -> bool:
+    i = bisect.bisect_right(newlines, a)
+    return i < len(newlines) and newlines[i] < b
+
+
 def quote_spans(text: str) -> list[tuple[int, int, str]]:
     """``(start, end, inner_text)`` for every quoted span, in order; overlapping spans are dropped."""
-    found: list[tuple[int, int, str]] = []
-    for pattern in (_DOUBLE, _CORNER, _WHITE_CORNER):
-        found += [(m.start(), m.end(), m.group(1)) for m in pattern.finditer(text)]
-    for m in _SINGLE.finditer(text):
-        if len(m.group(1).split()) >= 2:
-            found.append((m.start(), m.end(), m.group(1)))
+    newlines = [m.start() for m in _NEWLINE_RE.finditer(text)]
+    found = _double_spans(text, newlines) + _single_spans(text, newlines) + _corner_spans(text)
     spans: list[tuple[int, int, str]] = []
     for span in sorted(found):
         if not spans or span[0] >= spans[-1][1]:
-            spans.append(span)
+            if span[2].strip():
+                spans.append(span)
     return spans
 
 
 def extract_quotes(text: str) -> list[str]:
-    return [inner for _start, _end, inner in quote_spans(text) if inner.strip()]
+    return [inner for _start, _end, inner in quote_spans(text)]
 
 
-def mask_quotes(text: str) -> str:
-    """``text`` with quoted spans and inline code replaced by a neutral placeholder."""
+def remove_spans(text: str, spans: list[tuple[int, int, str]]) -> str:
+    """``text`` with ``spans`` replaced by a neutral placeholder word."""
     out, last = [], 0
-    for start, end, _inner in quote_spans(text):
+    for start, end, _inner in sorted(spans):
         out += [text[last:start], " Q "]
         last = end
     out.append(text[last:])
-    return _BACKTICK.sub(" Q ", "".join(out))
+    return "".join(out)
 
+
+# --- matching ------------------------------------------------------------------------------
 
 def normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).translate(_QUOTE_FOLD)
+    text = detection_form(text).translate(_QUOTE_FOLD)
     return _WS.sub(" ", text).strip().casefold()
 
 
@@ -113,25 +182,46 @@ def occurs_in(quote_norm: str, message_norm: str) -> bool:
     return False
 
 
-def equals_whole(quote_norm: str, message: str) -> bool:
-    return bool(quote_norm) and quote_norm == normalize_quote(message)
+def equals_whole(quote_norm: str, message_norm_quote: str) -> bool:
+    return bool(quote_norm) and quote_norm == message_norm_quote
 
 
-def match(quote: str, messages: Iterable[dict]) -> tuple[str, dict | None]:
-    """Look ``quote`` up in ``messages`` (newest first). Returns ``("found", row)``,
-    ``("too_short", row_or_None)`` or ``("not_found", None)``."""
-    q = normalize_quote(quote)
-    short = is_short(quote)
-    seen_inside = None
-    for row in messages:
-        text = row.get("text") or ""
-        if short:
-            if equals_whole(q, text):
+class Messages:
+    """Captured user messages prepared once per check: newest first, normalized once."""
+
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+        self.norm = [normalize(row.get("text") or "") for row in rows]
+        self.norm_whole = [_TRAILING_PUNCT.sub("", n) for n in self.norm]
+
+    def find(self, quote: str, whole_only: bool = False) -> tuple[str, dict | None]:
+        """``("found", row)``, ``("inside", row)`` (a short quote inside a longer message) or
+        ``("not_found", None)``. ``whole_only`` applies the short-quote rule."""
+        q = normalize_quote(quote)
+        inside = None
+        for i, row in enumerate(self.rows):
+            if whole_only:
+                if equals_whole(q, self.norm_whole[i]):
+                    return "found", row
+                if inside is None and occurs_in(q, self.norm[i]):
+                    inside = row
+            elif occurs_in(q, self.norm[i]):
                 return "found", row
-            if seen_inside is None and occurs_in(q, normalize(text)):
-                seen_inside = row
-        elif occurs_in(q, normalize(text)):
-            return "found", row
-    if short and seen_inside is not None:
-        return "too_short", seen_inside
-    return "not_found", None
+        return ("inside", inside) if inside is not None else ("not_found", None)
+
+
+# --- relatedness ---------------------------------------------------------------------------
+
+def content_tokens(text: str) -> set[str]:
+    """Latin words of 3+ letters (lower-cased, minus stopwords) and CJK character bigrams."""
+    norm = normalize(text)
+    tokens = {w for w in _LATIN_WORD.findall(_CJK_RE.sub(" ", norm))
+              if len(w) >= 3 and w not in patterns.STOPWORDS}
+    for run in _CJK_RE.findall(norm):
+        tokens.update(bigram for bigram in (run[i:i + 2] for i in range(len(run) - 1))
+                      if bigram not in patterns.ZH_STOP_BIGRAMS)
+    return tokens
+
+
+def related(quote: str, claim_without_quote: str) -> bool:
+    return len(content_tokens(quote) & content_tokens(claim_without_quote)) >= patterns.MIN_SHARED_TOKENS
