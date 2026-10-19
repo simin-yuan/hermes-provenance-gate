@@ -4,6 +4,7 @@ expected outcome. Run with ``-s`` to see the counts and pass rates."""
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,8 @@ CLAIMS = load("claims.jsonl")
 
 @pytest.fixture(autouse=True)
 def default_settings(monkeypatch):
-    for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SCOPE", "PROVENANCE_GATE_RETENTION_DAYS"):
+    for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SCOPE", "PROVENANCE_GATE_RETENTION_DAYS",
+                 "PROVENANCE_GATE_SEARCH"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -60,7 +62,16 @@ def run_case(case, directory: Path):
     gate = Gate(directory=lambda: directory)
     for said in case["said"]:
         capture.capture(directory, said["session"], said["text"])
-    result = gate.pre_tool_call(tool_name=case["tool"], args=case["args"], session_id=case["session"], turn_id="t")
+    previous = os.environ.get("PROVENANCE_GATE_SEARCH")
+    os.environ["PROVENANCE_GATE_SEARCH"] = case.get("search", "session")
+    try:
+        result = gate.pre_tool_call(tool_name=case["tool"], args=case["args"], session_id=case["session"],
+                                    turn_id="t")
+    finally:
+        if previous is None:
+            os.environ.pop("PROVENANCE_GATE_SEARCH", None)
+        else:
+            os.environ["PROVENANCE_GATE_SEARCH"] = previous
     rows = store.read_rows(directory / store.EVIDENCE_FILE)
     return result, rows
 
@@ -68,7 +79,12 @@ def run_case(case, directory: Path):
 def case_problems(case, directory: Path) -> list[str]:
     result, rows = run_case(case, directory)
     problems = []
-    if case["expect"] == "pass":
+    if case["expect"] == "pass-no-evidence":
+        if result is not None:
+            problems.append(f"blocked: {result['message']}")
+        if rows:
+            problems.append(f"evidence rows {rows}")
+    elif case["expect"] == "pass":
         if result is not None:
             problems.append(f"blocked: {result['message']}")
         if not rows or any(r["verdict"] != "pass" for r in rows):

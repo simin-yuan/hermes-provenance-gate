@@ -102,15 +102,11 @@
 {"category": "non-user-subject", "text": "用户名确认无误。"}
 {"category": "non-user-subject", "text": "弹出用户确认框后再继续。"}
 {"category": "non-user-subject", "text": "用户确认页面已经上线。"}
-{"category": "quoted-code", "text": "Search the audit log with `grep 'user approved' audit.log`."}
-{"category": "quoted-code", "text": "The changelog literally says \"the user decided\" in one place; leave it."}
 {"category": "quoted-code", "text": "Example log line: `2026-01-02 user decided=true` comes from the old exporter."}
 {"category": "quoted-code", "text": "Regex used by the parser: `^(user|owner) (approved|rejected)$`."}
-{"category": "quoted-code", "text": "Error text to match: \"Owner approved: false\"."}
 {"category": "quoted-code", "text": "Fixture name `test_user_confirmed_email` covers the signup flow."}
 {"category": "quoted-code", "text": "The column is called `user_decided_at`."}
 {"category": "quoted-code", "text": "Use `git log --grep=\"approved\"` to find approvals."}
-{"category": "quoted-code", "text": "The template prints 「用户决定」 as a label."}
 {"category": "quoted-code", "text": "SQL: `SELECT * FROM events WHERE kind = 'user_approved'`."}
 {"category": "structured", "text": "```yaml\nrelease:\n  owner: platform-team\n  approved: false\n  date: TBD\n```"}
 {"category": "structured", "text": "```json\n{\"user\": \"alice\", \"approved\": true, \"decided_at\": null}\n```"}
@@ -157,3 +153,61 @@
 {"category": "people", "text": "The user speaks English and Mandarin."}
 {"category": "people", "text": "用户是后端工程师，主要写 Go。"}
 {"category": "people", "text": "用户的时区是东八区。"}
+{"category": "generic-actor-qa", "text": "Bug #12: the user confirmed the email but the verification link had already expired."}
+{"category": "generic-actor-qa", "text": "Bug #31: the user approved the invoice, yet the status stayed PENDING."}
+{"category": "generic-actor-qa", "text": "Issue 88: user rejected the cookie banner and analytics still loaded."}
+{"category": "generic-actor-qa", "text": "Steps to reproduce: the user confirmed the order twice within one second."}
+{"category": "generic-actor-qa", "text": "Expected: the user approved the refund and the balance updates immediately."}
+{"category": "generic-actor-qa", "text": "Actual: the user chose express shipping but the label says standard."}
+{"category": "generic-actor-qa", "text": "Test case 4: the user decided to cancel mid-checkout; the cart must be restored."}
+{"category": "generic-actor-qa", "text": "Repro: owner approved the merge request while CI was still running."}
+{"category": "generic-actor-qa", "text": "Given the user confirmed the email, show the dashboard."}
+{"category": "generic-actor-qa", "text": "Acceptance criteria: the user confirmed the phone number before the first payout."}
+{"category": "generic-actor-qa", "text": "Precondition: the user agreed to the terms of service."}
+{"category": "generic-actor-qa", "text": "Story 210: the user chose a plan and confirmed the payment method."}
+{"category": "generic-actor-ux", "text": "In the usability study, the user chose the cheaper plan four times out of five."}
+{"category": "generic-actor-ux", "text": "In the prototype, the user confirmed the dialog without reading it."}
+{"category": "generic-actor-ux", "text": "During the walkthrough the user approved the draft by clicking the green button."}
+{"category": "generic-actor-ux", "text": "In the mockup the user decided between two layouts on the first screen."}
+{"category": "generic-actor-ux", "text": "Each user confirmed the shipping address before checkout."}
+{"category": "generic-actor-ux", "text": "Every user agreed to the new terms when the banner appeared."}
+{"category": "generic-actor-ux", "text": "For example, the user chose dark mode and the setting persisted across devices."}
+{"category": "generic-actor-ux", "text": "Typically the user approved the suggestion within ten seconds."}
+{"category": "generic-actor-ux", "text": "In the simulation, the owner vetoed half of the proposed changes."}
+{"category": "generic-actor-ux", "text": "Suppose the user rejected the upgrade; the old plan stays active."}
+{"category": "generic-actor-ui", "text": "| User confirmed the order | checkout.js |"}
+{"category": "generic-actor-ui", "text": "| Step | Handler |\n|---|---|\n| User confirmed the modal | onConfirm |\n| User rejected the modal | onCancel |"}
+{"category": "generic-actor-ui", "text": "| 用户确认收货 | order.ts |"}
+{"category": "generic-actor-ui", "text": "on_confirm: user confirmed the modal, emit event"}
+{"category": "generic-actor-ui", "text": "handle_approval(): owner approved the request, write the audit row"}
+{"category": "generic-actor-ui", "text": "order.confirmed: user confirmed the order in the app"}
+{"category": "generic-actor-ui", "text": "user confirmed: false"}
+{"category": "generic-actor-ui", "text": "user approved = true"}
+{"category": "generic-actor-ui", "text": "owner decided: null"}
+{"category": "generic-actor-ui", "text": "user chose: dark"}
+{"category": "generic-actor-code", "text": "```python\n# user confirmed the modal\nif event.user_confirmed:\n    emit('confirmed')\n```"}
+{"category": "generic-actor-code", "text": "```js\n// the user approved the request, so persist it\nsave(request)\n```"}
+{"category": "generic-actor-code", "text": "```\n# owner decided to skip this step in staging\nSKIP_STAGING=1\n```"}
+{"category": "generic-actor-code", "text": "    # the user rejected the cookie banner here\n    track('banner_rejected')"}
+{"category": "generic-actor-code", "text": "```yaml\n# user agreed to the terms\nterms_accepted: true\n```"}
+{"category": "generic-actor-code", "text": "~~~\n-- the user chose the annual plan\nUPDATE plans SET annual = true;\n~~~"}
+{"category": "generic-actor-code", "text": "```sql\n-- owner approved the export\nINSERT INTO exports VALUES (1);\n```"}
+{"category": "generic-actor-code", "text": "```python\n# 用户确认后发货\nship(order)\n```"}
+{"category": "generic-actor-zh", "text": "用户确认收货后，订单完成。"}
+{"category": "generic-actor-zh", "text": "用户同意隐私政策才能注册。"}
+{"category": "generic-actor-zh", "text": "测试中用户选择了蓝色按钮。"}
+{"category": "generic-actor-zh", "text": "仓库主人确认了这个修改。"}
+{"category": "generic-actor-zh", "text": "新用户确认邮箱后才能登录。"}
+{"category": "generic-actor-zh", "text": "用户确认支付后，系统发送短信。"}
+{"category": "generic-actor-zh", "text": "用户选择了配送方式后，页面显示运费。"}
+{"category": "generic-actor-zh", "text": "用户同意用户协议即可开始使用。"}
+{"category": "generic-actor-zh", "text": "例如用户选择了深色模式，设置会被保存。"}
+{"category": "generic-actor-zh", "text": "测试时用户拒绝了定位权限，地图仍然可用。"}
+{"category": "generic-actor-zh", "text": "店老板确认了营业时间。"}
+{"category": "generic-actor-zh", "text": "付费用户确认订阅后才能下载报告。"}
+{"category": "generic-actor-misc", "text": "The repo owner approved the PR after review."}
+{"category": "generic-actor-misc", "text": "The project owner decided to archive the old fork."}
+{"category": "generic-actor-misc", "text": "Rate limit: 100 requests per user per minute."}
+{"category": "generic-actor-misc", "text": "Store the user's choice in localStorage under the key theme."}
+{"category": "generic-actor-misc", "text": "See the user manual for how approvals work."}
+{"category": "generic-actor-misc", "text": "Users decided to stay on the old plan in last year's survey."}
