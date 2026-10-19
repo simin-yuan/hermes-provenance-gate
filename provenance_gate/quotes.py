@@ -167,19 +167,47 @@ def _word_continues(text: str, index: int, step: int) -> bool:
     return text[index] in _JOINERS and 0 <= nxt < len(text) and _word_char(text[nxt])
 
 
-def occurs_in(quote_norm: str, message_norm: str) -> bool:
-    """``quote_norm`` occurs in ``message_norm`` without cutting a Latin word in half."""
+def occurrences(quote_norm: str, message_norm: str) -> list[int]:
+    """Start offsets where ``quote_norm`` occurs in ``message_norm`` without cutting a Latin word."""
+    found: list[int] = []
     if not quote_norm:
-        return False
+        return found
     start = message_norm.find(quote_norm)
     while start != -1:
         end = start + len(quote_norm)
         cut_left = _word_char(quote_norm[0]) and _word_continues(message_norm, start - 1, -1)
         cut_right = _word_char(quote_norm[-1]) and _word_continues(message_norm, end, 1)
         if not cut_left and not cut_right:
-            return True
+            found.append(start)
         start = message_norm.find(quote_norm, start + 1)
-    return False
+    return found
+
+
+def occurs_in(quote_norm: str, message_norm: str) -> bool:
+    """``quote_norm`` occurs in ``message_norm`` without cutting a Latin word in half."""
+    return bool(occurrences(quote_norm, message_norm))
+
+
+_NEGATION_WORDS = frozenset(patterns.EN_NEGATIONS)
+_NEGATION_LOOKBACK = 3
+
+
+def has_negation(text_norm: str) -> bool:
+    if any(ch in patterns.ZH_NEGATION_CHARS for ch in text_norm):
+        return True
+    return any(w in _NEGATION_WORDS or w.endswith(("n't", "n’t"))
+               for w in re.findall(r"[a-z]+(?:['’][a-z]+)?", text_norm))
+
+
+def negated_at(message_norm: str, start: int) -> bool:
+    """A negation word among the 3 words (Latin) or 4 characters (CJK) right before ``start``:
+    "Never delete the prod database" does not back a quote of "delete the prod database"."""
+    before = message_norm[max(0, start - 80):start]
+    cjk_tail = before.rstrip()[-4:]
+    if any(ch in patterns.ZH_NEGATION_CHARS for ch in cjk_tail):
+        return True
+    words = re.findall(r"[a-z]+(?:['’][a-z]+)?", before)[-_NEGATION_LOOKBACK:]
+    return any(w in _NEGATION_WORDS or w.endswith(("n't", "n’t")) for w in words)
 
 
 def equals_whole(quote_norm: str, message_norm_quote: str) -> bool:
@@ -195,19 +223,28 @@ class Messages:
         self.norm_whole = [_TRAILING_PUNCT.sub("", n) for n in self.norm]
 
     def find(self, quote: str, whole_only: bool = False) -> tuple[str, dict | None]:
-        """``("found", row)``, ``("inside", row)`` (a short quote inside a longer message) or
-        ``("not_found", None)``. ``whole_only`` applies the short-quote rule."""
+        """``("found", row)``, ``("inside", row)`` (a short quote inside a longer message),
+        ``("negated", row)`` (every occurrence follows a negation word) or ``("not_found", None)``.
+        ``whole_only`` applies the short-quote rule."""
         q = normalize_quote(quote)
-        inside = None
+        inside = negated = None
         for i, row in enumerate(self.rows):
             if whole_only:
                 if equals_whole(q, self.norm_whole[i]):
                     return "found", row
                 if inside is None and occurs_in(q, self.norm[i]):
                     inside = row
-            elif occurs_in(q, self.norm[i]):
+                continue
+            starts = occurrences(q, self.norm[i])
+            if starts and has_negation(q):
+                return "found", row  # the quote carries its own negation; nothing was dropped
+            if any(not negated_at(self.norm[i], start) for start in starts):
                 return "found", row
-        return ("inside", inside) if inside is not None else ("not_found", None)
+            if starts and negated is None:
+                negated = row
+        if inside is not None:
+            return "inside", inside
+        return ("negated", negated) if negated is not None else ("not_found", None)
 
 
 # --- relatedness ---------------------------------------------------------------------------

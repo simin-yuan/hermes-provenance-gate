@@ -255,3 +255,8 @@ ZH_STOP_BIGRAMS = frozenset({"用户", "用戶", "主人", "老板", "老闆", "
                              "原話", "用户原", "户原"})
 # A quote and the claim sentence (with the quote removed) must share this many content tokens.
 MIN_SHARED_TOKENS = 2
+
+# --- Negation right before a quoted span in the user's message (quotes.negated_at) -------------
+
+EN_NEGATIONS = ("never", "not", "no", "without", "dont", "cannot", "nor", "neither", "stop", "avoid")
+ZH_NEGATION_CHARS = frozenset("不别別勿没沒未禁绝絕莫甭")

@@ -107,3 +107,17 @@ def test_related():
     assert not quotes.related("can you look at the logs for me", "The user approved deleting the prod database ( Q )")
     assert quotes.related("就周五发布吧", "用户决定周五发布（用户原话： Q ）。")
     assert not quotes.related("ship it", "User decided to ship ( Q )")  # one shared token is not enough
+
+
+def test_a_quote_that_drops_a_negation_does_not_count():
+    from provenance_gate.quotes import Messages
+    msgs = Messages([{"text": "Never delete the prod database without asking me"}])
+    assert msgs.find("delete the prod database")[0] == "negated"
+    assert Messages([{"text": "Please delete the prod database tonight"}]).find("delete the prod database")[0] == "found"
+    assert Messages([{"text": "Don't ever ship on Friday"}]).find("ever ship on Friday")[0] == "negated"
+    assert Messages([{"text": "不要删除生产数据库"}]).find("删除生产数据库")[0] == "negated"
+    # the negation is inside the quote: nothing was dropped
+    assert Messages([{"text": "No, we are not adding telemetry."}]).find("we are not adding telemetry")[0] == "found"
+    # one clean occurrence is enough
+    msgs = Messages([{"text": "never ship on Friday again; actually, ship on Friday this week"}])
+    assert msgs.find("ship on Friday")[0] == "found"

@@ -228,18 +228,33 @@ def is_question(text: str) -> bool:
     return _strip_tags(text).rstrip(" \t)]）】*_\"'”’").endswith(("?", "？"))
 
 
-def find_claim(sentence: str, scope: str = SCOPE_DECISIONS) -> Claim | None:
-    """The first claim pattern in ``sentence`` (already in detection form) that passes the
-    exemptions, or None. Quoted text is NOT masked here: the caller removes verified quotes."""
+def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS) -> list[tuple[int, Claim]]:
+    """Every claim match in ``sentence`` (already in detection form) that passes the exemptions,
+    as ``(start offset, Claim)`` in order of position; overlapping matches count once. Quoted
+    text is NOT masked here: the caller removes verified quotes."""
     if not sentence or not SUBJECT_HINT.search(sentence) or is_question(sentence) or _sentence_exempt(sentence):
-        return None
+        return []
+    found: list[tuple[int, int, Claim]] = []
     for lang, kind, regex, names in _compiled(scope):
         for match in regex.finditer(sentence):
             ok = (_zh_subject_ok(sentence, match) if lang == "zh"
                   else _en_subject_ok(sentence, match, phrase=lang == "en-phrase"))
             if ok:
-                return Claim(sentence=sentence, pattern=names[match.lastgroup], kind=kind)
-    return None
+                found.append((match.start(), match.end(), Claim(sentence=sentence, pattern=names[match.lastgroup], kind=kind)))
+    found.sort(key=lambda item: (item[0], -item[1]))
+    out: list[tuple[int, Claim]] = []
+    last_end = -1
+    for start, end, claim in found:
+        if start >= last_end:
+            out.append((start, claim))
+            last_end = end
+    return out
+
+
+def find_claim(sentence: str, scope: str = SCOPE_DECISIONS) -> Claim | None:
+    """The first claim in ``sentence`` that passes the exemptions, or None."""
+    matches = find_claim_matches(sentence, scope)
+    return matches[0][1] if matches else None
 
 
 def find_claims(text: str, scope: str = SCOPE_DECISIONS) -> list[Claim]:

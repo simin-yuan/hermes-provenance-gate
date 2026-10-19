@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from . import capture, store, verdict
+from . import capture, results, store, verdict
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class Gate:
     def __init__(self, directory: Callable[[], Path] = store.data_dir):
         self._directory = directory
         self.blocks = verdict.BlockCounter()
+        self.resolver = results.DiskResolver()
 
     def pre_llm_call(self, session_id: str = "", user_message: Any = None, platform: str = "",
                      sender_id: str = "", **_: Any) -> None:
@@ -60,7 +61,8 @@ class Gate:
             directory = None
         search = verdict.search_mode()
         try:
-            checks = verdict.evaluate(tool_name, args, session_id, self._said(directory), verdict.scope(), search)
+            checks = verdict.evaluate(tool_name, args, session_id, self._said(directory), verdict.scope(), search,
+                                      self.resolver)
         except verdict.ArgError as exc:
             checks = [verdict.failure(tool_name, verdict.REASON_UNREADABLE, str(exc))]
         except Exception:

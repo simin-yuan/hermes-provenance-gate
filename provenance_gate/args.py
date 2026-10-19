@@ -67,16 +67,36 @@ def _texts(op: dict, fields: tuple[str, ...], where: str) -> list[str]:
     return out
 
 
-def _memory_texts(op: dict, where: str) -> list[str]:
+def _memory_texts(op: dict, where: str, target: str, resolver) -> list[str]:
     action = op.get("action")
     if action not in MEMORY_TEXT_ACTIONS:
         return []
     texts = _texts(op, ("content", "new_text"), where)
     # The tool writes content, falling back to new_text when content is empty (tools/memory_tool.py).
-    return texts[:1]
+    texts = texts[:1]
+    old_text = op.get("old_text")
+    if action == "patch" and texts and isinstance(old_text, str) and old_text and resolver is not None:
+        entry = resolver.memory_entry_after(target, old_text, texts[0])
+        if entry:
+            return [entry]  # the whole patched entry, not just the new span (results.py)
+    return texts
 
 
-def added_texts(tool_name: str, args: Any) -> list[tuple[str, str]]:
+def _skill_texts(op: dict, action, fields: tuple[str, ...], where: str, name: str, resolver) -> list[str]:
+    texts = _texts(op, fields, where)
+    old = op.get("old_string")
+    if action == "patch" and isinstance(old, str) and old and resolver is not None:
+        new = op.get("new_string")
+        new = new if isinstance(new, str) else ""
+        file_path = op.get("file_path") if isinstance(op.get("file_path"), str) else None
+        after = resolver.skill_text_after(name, file_path, old, new, bool(op.get("replace_all")))
+        if after is not None:
+            full = [t for t in _texts(op, ("content",), where)]
+            return ([after] if after.strip() else []) + full
+    return texts
+
+
+def added_texts(tool_name: str, args: Any, resolver=None) -> list[tuple[str, str]]:
     """``(target, text)`` for every piece of text the call would add. Removals add nothing.
 
     memory: ``add`` / ``patch`` write ``content`` (alias ``new_text``), as a single op, or as each
@@ -84,6 +104,9 @@ def added_texts(tool_name: str, args: Any) -> list[tuple[str, str]]:
     skill_manage: ``create`` / ``edit`` -> ``content``; ``patch`` -> ``new_string`` and/or a full
     ``content``; ``write_file`` -> ``file_content``; ``operations`` when present, else the legacy
     flat shape. Raises ``ArgError`` for a shape that cannot be read.
+
+    With a ``resolver`` (results.DiskResolver inside Hermes), a patch contributes what it produces:
+    the whole patched memory entry, or the patched skill paragraphs.
     """
     if tool_name not in ("memory", "skill_manage"):
         return []
@@ -96,9 +119,9 @@ def added_texts(tool_name: str, args: Any) -> list[tuple[str, str]]:
         ops = coerce_operations(args.get("operations"))
         if ops:
             for index, op in enumerate(ops, 1):
-                out += [(f"memory:{target}", t) for t in _memory_texts(op, f"operation {index}")]
+                out += [(f"memory:{target}", t) for t in _memory_texts(op, f"operation {index}", target, resolver)]
         else:
-            out += [(f"memory:{target}", t) for t in _memory_texts(args, "memory")]
+            out += [(f"memory:{target}", t) for t in _memory_texts(args, "memory", target, resolver)]
         return out
     ops = coerce_operations(args.get("operations"))
     default_name = args.get("name") if isinstance(args.get("name"), str) else ""
@@ -106,5 +129,5 @@ def added_texts(tool_name: str, args: Any) -> list[tuple[str, str]]:
         action = op.get("action")
         name = op.get("name") if isinstance(op.get("name"), str) else default_name
         fields = SKILL_TEXT_FIELDS.get(action, ())
-        out += [(f"skill:{name}", t) for t in _texts(op, fields, f"operation {index}")]
+        out += [(f"skill:{name}", t) for t in _skill_texts(op, action, fields, f"operation {index}", name, resolver)]
     return out
