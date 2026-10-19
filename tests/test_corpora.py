@@ -122,3 +122,17 @@ def test_claims_corpus_summary(tmp_path, capsys):
         for category, (ok, total) in sorted(by_category.items()):
             print(f"  {category}: {ok}/{total}")
     assert met == len(CLAIMS)
+
+
+REGRESSIONS = load("audit_regressions.jsonl")
+
+
+@pytest.mark.parametrize("row", REGRESSIONS, ids=[f"r{i:03d}" for i in range(len(REGRESSIONS))])
+def test_audit_regression(row):
+    """Shapes reported by the independent audits, labelled by hand (claim or not)."""
+    from provenance_gate.claims import find_claims
+    assert bool(find_claims(row["text"])) == row["claim"], row["text"]
+
+
+def test_audit_regressions_summary():
+    assert len(REGRESSIONS) == 100 and sum(r["claim"] for r in REGRESSIONS) == 40

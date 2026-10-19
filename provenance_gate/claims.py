@@ -34,8 +34,11 @@ _WORD = re.compile(r"[A-Za-z][A-Za-z'’.]*")
 _WINDOW = 120  # characters before a match that the subject checks look at
 _KEY_VALUE = re.compile(r"^\s*([^:=\n]{1,60}?)\s*(?::|=)(?=\s|$)")
 _IDENTIFIER_KEY = re.compile(r"^[A-Za-z_][\w.\-/()\[\]]*$")
-_SCALAR_VALUE = re.compile(r"^(?:true|false|yes|no|null|none|nil|~|on|off|-?\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*'|\S{1,24})?$",
+_SCALAR_VALUE = re.compile(r"^(?:true|false|yes|no|null|none|nil|~|on|off|-?\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*')?$",
                            re.IGNORECASE)
+_WORD_VALUE = re.compile(r"^\S{1,24}$")
+_ZH_BRACKETED = re.compile(r"「[^」]*」|『[^』]*』|（[^）]*）|\([^)]*\)|“[^”]*”|\"[^\"]*\"")
+_EMPHASIS = re.compile(r"\*\*|__")
 _TRAILING_PAREN = re.compile(r"\s*\([^()]{0,80}\)\s*[.!]?\s*$")
 _ZH_CLAUSE_END = re.compile(r"[，。；！？,;!?\n]")
 
@@ -120,8 +123,8 @@ def _compiled(scope: str):
         alternation = "|".join(f"(?P<{group}>{regex})" for group, _name, regex in verbs)
         names = {group: name for group, name, _regex in verbs}
         if lang == "en":
-            regex = re.compile(rf"(?<![\w-])(?P<subj>{patterns.EN_SUBJECT}){patterns.EN_AUX}{patterns.EN_ADVERBS}"
-                               rf"\s+(?:{alternation})(?![\w-])", re.IGNORECASE)
+            regex = re.compile(rf"(?<![\w-])(?P<subj>{patterns.EN_SUBJECT}){patterns.EN_SUBJECT_PAREN}{patterns.EN_AUX}"
+                               rf"{patterns.EN_ADVERBS}\s+(?:{alternation})(?![\w-])", re.IGNORECASE)
         else:
             regex = re.compile(rf"(?P<subj>{patterns.ZH_SUBJECT}){patterns.ZH_ADVERBS}\s*(?:{alternation})")
         out.append((lang, kind, regex, names))
@@ -135,7 +138,7 @@ def _compiled(scope: str):
 @lru_cache(maxsize=1)
 def _spec_label_re():
     labels = "|".join(re.escape(label) for label in sorted(patterns.EN_SPEC_LABELS, key=len, reverse=True))
-    return re.compile(rf"^\W*(?:{labels})\s*(?:#?\s*\d+[a-z]?)?\s*:", re.IGNORECASE)
+    return re.compile(rf"^\W*(?:{labels})(?:\s*#?\s*[\w.\-]{{1,20}})?\s*(?::|\s[-–—]\s)", re.IGNORECASE)
 
 
 # --- exemptions ------------------------------------------------------------------------------
@@ -155,8 +158,11 @@ def _key_value_exempt(sentence: str, match_start: int) -> bool:
     if _IDENTIFIER_KEY.match(key) and ("_" in key or "." in key or "(" in key):
         return True
     value = sentence[kv.end():].strip().rstrip(".;,")
+    # A lower-case key with a one-word value reads as data ("user chose: dark"); a capitalised
+    # prose key with a word value is a claim ("User decided: Postgres.").
+    scalar = bool(_SCALAR_VALUE.match(value)) or (key[:1].islower() and bool(_WORD_VALUE.match(value)))
     return (match_start < kv.end(1) and len(key.split()) <= patterns.KEY_MAX_WORDS
-            and not any(ch in key for ch in ",—–") and bool(_SCALAR_VALUE.match(value)))
+            and not any(ch in key for ch in ",—–") and scalar)
 
 
 def _sentence_exempt(sentence: str) -> bool:
@@ -164,12 +170,26 @@ def _sentence_exempt(sentence: str) -> bool:
     return bool(_spec_label_re().match(sentence)) or lowered.startswith(tuple(s + " " for s in patterns.EN_SPEC_STARTS))
 
 
+def _clause_words_before(text: str, index: int) -> list[str]:
+    """Words before ``index`` back to the last contrast or clause break (patterns.EN_CLAUSE_BREAKS)."""
+    before = text[max(0, index - _WINDOW):index]
+    lowered = before.lower()
+    cut = max((lowered.rfind(b) + len(b) for b in patterns.EN_CLAUSE_BREAKS if b in lowered), default=0)
+    return [w.lower().rstrip(".'’") for w in _WORD.findall(before[cut:])]
+
+
 def _en_subject_ok(text: str, match: re.Match, phrase: bool) -> bool:
     start = match.start()
     words = _words_before(text, start)
     if any(w in patterns.EN_CONDITIONALS for w in words[-3:]):
         return False
-    if any(w in patterns.EN_GENERIC_CONTEXT for w in words):
+    clause_words = _clause_words_before(text, start)
+    if any(w in patterns.EN_GENERIC_CONTEXT for w in clause_words):
+        return False
+    if any(w in patterns.EN_REPORTED_VERBS for w in clause_words):
+        return False  # a source reports it: "Docs say the user decided ..."
+    after = _WORD.findall(text[match.end():match.end() + 40])
+    if after and after[0].lower().rstrip(".") in patterns.EN_FIELD_NOUNS:
         return False
     if _key_value_exempt(text, start):
         return False
@@ -183,8 +203,20 @@ def _en_subject_ok(text: str, match: re.Match, phrase: bool) -> bool:
     return bool(words) and before.lower().endswith(words[-1]) and words[-1] in patterns.EN_BARE_SUBJECT_AFTER
 
 
+@lru_cache(maxsize=1)
+def _zh_de_predicate():
+    preds = "|".join(map(re.escape, patterns.ZH_PREDICATES_AFTER_DE))
+    return re.compile(rf"的[^的，。；,;!?！？\s]{{1,8}}?(?:{preds})")
+
+
 def _zh_subject_ok(text: str, match: re.Match) -> bool:
     before = text[max(0, match.start() - _WINDOW):match.start()]
+    rest = text[match.end():match.end() + _WINDOW]
+    if rest.lstrip().startswith(patterns.ZH_NOUN_SUFFIXES) or rest.startswith("的"):
+        return False  # 用户确认码, 用户批准率, 老板同意的报销单: a noun, not a decision
+    clause_after = _ZH_BRACKETED.sub("", _ZH_CLAUSE_END.split(rest, 1)[0])
+    if _zh_de_predicate().search(clause_after):
+        return False  # 用户确认支付的回调可能重复: the phrase is the subject of another statement
     tight = before.rstrip()
     if tight.endswith(patterns.ZH_OPEN_BEFORE):
         return False
@@ -234,13 +266,17 @@ def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS) -> list[tupl
     text is NOT masked here: the caller removes verified quotes."""
     if not sentence or not SUBJECT_HINT.search(sentence) or is_question(sentence) or _sentence_exempt(sentence):
         return []
+    sentence_in = sentence
+    sentence = _EMPHASIS.sub("  ", sentence)  # **The user** approved: emphasis marks, same length
+    # a data-dictionary line (用户同意时间 = consent_at) or a script / record / process description
+    zh_data_line = "=" in sentence or any(marker in sentence for marker in patterns.ZH_SOURCE_MARKERS)
     found: list[tuple[int, int, Claim]] = []
     for lang, kind, regex, names in _compiled(scope):
         for match in regex.finditer(sentence):
-            ok = (_zh_subject_ok(sentence, match) if lang == "zh"
+            ok = ((not zh_data_line and _zh_subject_ok(sentence, match)) if lang == "zh"
                   else _en_subject_ok(sentence, match, phrase=lang == "en-phrase"))
             if ok:
-                found.append((match.start(), match.end(), Claim(sentence=sentence, pattern=names[match.lastgroup], kind=kind)))
+                found.append((match.start(), match.end(), Claim(sentence=sentence_in, pattern=names[match.lastgroup], kind=kind)))
     found.sort(key=lambda item: (item[0], -item[1]))
     out: list[tuple[int, Claim]] = []
     last_end = -1
