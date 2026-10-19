@@ -1,0 +1,159 @@
+{"category": "environment", "text": "Host runs Ubuntu 24.04 with Python 3.14 managed by uv."}
+{"category": "environment", "text": "The dev database listens on localhost:5433, not the default port."}
+{"category": "environment", "text": "Node 22 is installed via fnm; npm is not on PATH in cron jobs."}
+{"category": "environment", "text": "Docker Desktop is unavailable; use podman for local containers."}
+{"category": "environment", "text": "GPU is an RTX 4090 with 24 GB VRAM; CUDA 12.6 drivers."}
+{"category": "environment", "text": "The repo lives at ~/src/atlas and the virtualenv is .venv inside it."}
+{"category": "environment", "text": "SSH to the staging box goes through the bastion at jump.internal."}
+{"category": "environment", "text": "Timezone on the server is UTC; the user's laptop is on Asia/Shanghai."}
+{"category": "environment", "text": "Homebrew prefix is /opt/homebrew on this Mac."}
+{"category": "environment", "text": "Git default branch is main; origin points at the company GitLab."}
+{"category": "environment", "text": "The CI runner image has no network access after the install step."}
+{"category": "environment", "text": "PostgreSQL 16 with the pgvector extension is installed."}
+{"category": "environment", "text": "Memory limit for the worker container is 2 GiB."}
+{"category": "environment", "text": "The VPN must be on to reach the internal package index."}
+{"category": "environment", "text": "Windows machine uses PowerShell 7; paths need backslashes in scripts."}
+{"category": "environment", "text": "服务器系统是 Debian 12，Python 由 uv 管理。"}
+{"category": "environment", "text": "开发数据库端口是 5433，不是默认端口。"}
+{"category": "environment", "text": "公司内网的 PyPI 镜像地址是 pypi.internal。"}
+{"category": "environment", "text": "笔记本是 M3 MacBook Pro，内存 36 GB。"}
+{"category": "environment", "text": "测试环境的 Redis 没有设置密码。"}
+{"category": "convention", "text": "Commit messages follow Conventional Commits."}
+{"category": "convention", "text": "Tests live next to the code in tests/ and run with pytest -q."}
+{"category": "convention", "text": "Use ruff for linting and formatting; line length is 120."}
+{"category": "convention", "text": "Feature branches are named feat/<ticket>-<slug>."}
+{"category": "convention", "text": "Database migrations are generated with alembic and reviewed by hand."}
+{"category": "convention", "text": "Never commit .env files; secrets go in the vault."}
+{"category": "convention", "text": "API responses use snake_case keys."}
+{"category": "convention", "text": "Release tags look like v1.2.3 and are signed."}
+{"category": "convention", "text": "Docs are written in Markdown under docs/ and built with mkdocs."}
+{"category": "convention", "text": "Every public function needs a docstring with an example."}
+{"category": "convention", "text": "Run make check before pushing; it runs lint, types and tests."}
+{"category": "convention", "text": "Version numbers follow SemVer."}
+{"category": "convention", "text": "Changelog entries go under the Unreleased heading."}
+{"category": "convention", "text": "Prefer pathlib over os.path in new code."}
+{"category": "convention", "text": "Logging uses structlog with JSON output in production."}
+{"category": "convention", "text": "代码提交信息使用 Conventional Commits 格式。"}
+{"category": "convention", "text": "测试文件放在 tests/ 目录，用 pytest 运行。"}
+{"category": "convention", "text": "分支命名规则：feat/工单号-简述。"}
+{"category": "convention", "text": "所有接口返回值使用 snake_case。"}
+{"category": "convention", "text": "提交前先运行 make check。"}
+{"category": "preference", "text": "User prefers dark mode in every editor."}
+{"category": "preference", "text": "The user prefers short answers without preamble."}
+{"category": "preference", "text": "User likes type hints on all new functions."}
+{"category": "preference", "text": "The user prefers pnpm over npm."}
+{"category": "preference", "text": "Owner likes weekly summaries on Fridays."}
+{"category": "preference", "text": "The user prefers British spelling in documentation."}
+{"category": "preference", "text": "User dislikes emoji in commit messages."}
+{"category": "preference", "text": "The user would rather see diffs than full files."}
+{"category": "preference", "text": "用户喜欢简短的回答。"}
+{"category": "preference", "text": "用户偏好使用 pnpm。"}
+{"category": "preference", "text": "用户更喜欢深色主题。"}
+{"category": "preference", "text": "老板喜欢每周五收到周报。"}
+{"category": "open-or-negated", "text": "The user has not decided on the release date yet."}
+{"category": "open-or-negated", "text": "The user hasn't approved the budget increase."}
+{"category": "open-or-negated", "text": "The user didn't agree to drop Python 3.11 support."}
+{"category": "open-or-negated", "text": "The user may decide to move to Postgres next quarter."}
+{"category": "open-or-negated", "text": "The user will decide later whether to open-source it."}
+{"category": "open-or-negated", "text": "The user asked whether we can ship on Friday."}
+{"category": "open-or-negated", "text": "Launch date: to be confirmed by the owner."}
+{"category": "open-or-negated", "text": "Has the user approved the new logo?"}
+{"category": "open-or-negated", "text": "Once the user has decided, update the roadmap."}
+{"category": "open-or-negated", "text": "If the owner approved the spend, order the GPUs."}
+{"category": "open-or-negated", "text": "Wait until the user confirms before deleting anything."}
+{"category": "open-or-negated", "text": "The owner never signed off on the redesign."}
+{"category": "open-or-negated", "text": "Pending: whether the user approved the migration plan."}
+{"category": "open-or-negated", "text": "Open question for the user: keep or drop the legacy API?"}
+{"category": "open-or-negated", "text": "Ask the user before running destructive commands."}
+{"category": "open-or-negated", "text": "The user might choose a different hosting provider."}
+{"category": "open-or-negated", "text": "用户未决定发布日期。"}
+{"category": "open-or-negated", "text": "用户还没确认新的预算。"}
+{"category": "open-or-negated", "text": "用户尚未同意该方案。"}
+{"category": "open-or-negated", "text": "发布时间待用户确认。"}
+{"category": "open-or-negated", "text": "用户是否同意迁移还不清楚。"}
+{"category": "open-or-negated", "text": "迁移方案由用户决定。"}
+{"category": "open-or-negated", "text": "如果用户同意，就周五发布。"}
+{"category": "open-or-negated", "text": "用户确认后再执行删除操作。"}
+{"category": "open-or-negated", "text": "用户不同意直接上线。"}
+{"category": "open-or-negated", "text": "需要老板批准才能采购。"}
+{"category": "non-user-subject", "text": "The build confirmed the fix on all three platforms."}
+{"category": "non-user-subject", "text": "CI decided to retry the flaky job twice."}
+{"category": "non-user-subject", "text": "The scheduler approved the job after the quota check."}
+{"category": "non-user-subject", "text": "Vendor confirmed the outage was on their side."}
+{"category": "non-user-subject", "text": "The linter rejected the import order."}
+{"category": "non-user-subject", "text": "The repo owner approved the pull request."}
+{"category": "non-user-subject", "text": "Product owner approved the Q3 budget."}
+{"category": "non-user-subject", "text": "The API gateway rejected requests without a token."}
+{"category": "non-user-subject", "text": "Legal confirmed the license is compatible."}
+{"category": "non-user-subject", "text": "The team agreed on two-week sprints."}
+{"category": "non-user-subject", "text": "Our manager chose the vendor last year."}
+{"category": "non-user-subject", "text": "The upstream maintainer vetoed the patch."}
+{"category": "non-user-subject", "text": "Tests confirmed that the cache is invalidated."}
+{"category": "non-user-subject", "text": "The payment provider approved the merchant account."}
+{"category": "non-user-subject", "text": "The user-facing API rejected empty names."}
+{"category": "non-user-subject", "text": "The user's manager decided to delay the review."}
+{"category": "non-user-subject", "text": "He decided to keep the old config."}
+{"category": "non-user-subject", "text": "They agreed to share the dashboard."}
+{"category": "non-user-subject", "text": "测试已确认通过。"}
+{"category": "non-user-subject", "text": "构建系统已确认缓存失效。"}
+{"category": "non-user-subject", "text": "团队决定采用双周迭代。"}
+{"category": "non-user-subject", "text": "供应商确认是他们那边的故障。"}
+{"category": "non-user-subject", "text": "用户界面已确认可以使用。"}
+{"category": "non-user-subject", "text": "用户名确认无误。"}
+{"category": "non-user-subject", "text": "弹出用户确认框后再继续。"}
+{"category": "non-user-subject", "text": "用户确认页面已经上线。"}
+{"category": "quoted-code", "text": "Search the audit log with `grep 'user approved' audit.log`."}
+{"category": "quoted-code", "text": "The changelog literally says \"the user decided\" in one place; leave it."}
+{"category": "quoted-code", "text": "Example log line: `2026-01-02 user decided=true` comes from the old exporter."}
+{"category": "quoted-code", "text": "Regex used by the parser: `^(user|owner) (approved|rejected)$`."}
+{"category": "quoted-code", "text": "Error text to match: \"Owner approved: false\"."}
+{"category": "quoted-code", "text": "Fixture name `test_user_confirmed_email` covers the signup flow."}
+{"category": "quoted-code", "text": "The column is called `user_decided_at`."}
+{"category": "quoted-code", "text": "Use `git log --grep=\"approved\"` to find approvals."}
+{"category": "quoted-code", "text": "The template prints 「用户决定」 as a label."}
+{"category": "quoted-code", "text": "SQL: `SELECT * FROM events WHERE kind = 'user_approved'`."}
+{"category": "structured", "text": "```yaml\nrelease:\n  owner: platform-team\n  approved: false\n  date: TBD\n```"}
+{"category": "structured", "text": "```json\n{\"user\": \"alice\", \"approved\": true, \"decided_at\": null}\n```"}
+{"category": "structured", "text": "| setting | value |\n|---|---|\n| python | 3.14 |\n| owner | infra |"}
+{"category": "structured", "text": "| step | status |\n|---|---|\n| build | confirmed green |\n| deploy | waiting on user |"}
+{"category": "structured", "text": "- python: 3.14\n- package manager: uv\n- linter: ruff"}
+{"category": "structured", "text": "## Environment\n- OS: Ubuntu 24.04\n- Shell: zsh"}
+{"category": "structured", "text": "```toml\n[tool.ruff]\nline-length = 120\n```"}
+{"category": "structured", "text": "1. Pull main\n2. Run make check\n3. Open a merge request"}
+{"category": "structured", "text": "| 项目 | 值 |\n|---|---|\n| 语言 | Python |\n| 负责人 | 平台组 |"}
+{"category": "structured", "text": "```bash\nexport APPROVED_BY=\"$USER\"\n./deploy.sh --confirm\n```"}
+{"category": "structured", "text": "---\nname: release-notes\ndescription: Use when writing release notes. Summarize merged PRs.\n---\n# Release notes\n1. Collect merged PRs.\n2. Group by type."}
+{"category": "structured", "text": "approved_by: null\ndecided: false\nowner: unknown"}
+{"category": "procedure", "text": "To rotate the API key, run scripts/rotate_key.py and update the vault entry."}
+{"category": "procedure", "text": "When CI fails on Windows, check for CRLF line endings first."}
+{"category": "procedure", "text": "If the migration fails, roll back with alembic downgrade -1."}
+{"category": "procedure", "text": "Before a release, bump the version in pyproject.toml and tag it."}
+{"category": "procedure", "text": "Large files go to Git LFS; images over 1 MB must be compressed."}
+{"category": "procedure", "text": "Run the benchmarks with --repeat 5 and report the median."}
+{"category": "procedure", "text": "Restart the worker after changing the queue configuration."}
+{"category": "procedure", "text": "Use the staging bucket for any experiment that writes data."}
+{"category": "procedure", "text": "Confirm the backup finished before running the cleanup job."}
+{"category": "procedure", "text": "Decide between retry and fail-fast based on the error code."}
+{"category": "procedure", "text": "Approve dependency updates only after the lockfile diff is reviewed."}
+{"category": "procedure", "text": "遇到 Windows 上的 CI 失败，先检查换行符。"}
+{"category": "procedure", "text": "发布前更新版本号并打标签。"}
+{"category": "procedure", "text": "迁移失败时用 alembic downgrade -1 回滚。"}
+{"category": "assistant-suggestion", "text": "Suggestion: ship on Friday if the tests stay green (my proposal, not decided)."}
+{"category": "assistant-suggestion", "text": "I recommend switching to uv; the user has not answered yet."}
+{"category": "assistant-suggestion", "text": "Proposed: freeze the API until 2.0. Awaiting the user's reply."}
+{"category": "assistant-suggestion", "text": "My plan is to split the service in two; still an open question for the user."}
+{"category": "assistant-suggestion", "text": "建议周五发布，用户尚未回复。"}
+{"category": "assistant-suggestion", "text": "我的建议是先写测试，待用户确认。"}
+{"category": "history", "text": "Last week the deploy failed because the disk was full."}
+{"category": "history", "text": "The 2.3 release shipped on 12 March."}
+{"category": "history", "text": "We moved from Travis to GitHub Actions in 2024."}
+{"category": "history", "text": "The old cron job was removed after the incident review."}
+{"category": "history", "text": "A previous attempt to cache embeddings caused stale results."}
+{"category": "history", "text": "上周部署失败是因为磁盘满了。"}
+{"category": "history", "text": "去年从 Travis 迁移到了 GitHub Actions。"}
+{"category": "people", "text": "The user's name is Alex; they work on the data platform team."}
+{"category": "people", "text": "Owner of the repo is the infra team."}
+{"category": "people", "text": "The user is a backend engineer who mostly writes Go."}
+{"category": "people", "text": "The user speaks English and Mandarin."}
+{"category": "people", "text": "用户是后端工程师，主要写 Go。"}
+{"category": "people", "text": "用户的时区是东八区。"}
