@@ -7,14 +7,16 @@ as UTF-8 bytes with ``\\n`` endings on every OS.
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -78,17 +80,37 @@ def _thread_lock(path: Path) -> threading.Lock:
         return _thread_locks.setdefault(key, threading.Lock())
 
 
+LOCK_TIMEOUT_SECONDS = 30.0
+LOCK_RETRY_SECONDS = 0.05
+# errno values msvcrt.locking raises when another handle holds the byte (EACCES, EDEADLOCK).
+_CONTENTION_ERRNOS = frozenset({errno.EACCES, getattr(errno, "EDEADLOCK", 36), getattr(errno, "EDEADLK", 35)})
+
+
+def lock_with_retry(try_lock: Callable[[], None], timeout: float = LOCK_TIMEOUT_SECONDS,
+                    sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic) -> None:
+    """Call ``try_lock`` (a non-blocking attempt) until it succeeds. Only lock contention is
+    retried, and only until ``timeout`` (then ``TimeoutError``); any other ``OSError`` propagates."""
+    deadline = clock() + timeout
+    while True:
+        try:
+            try_lock()
+            return
+        except OSError as exc:
+            if exc.errno not in _CONTENTION_ERRNOS:
+                raise
+            if clock() >= deadline:
+                raise TimeoutError(f"lock still held after {timeout:.0f}s") from exc
+            sleep(LOCK_RETRY_SECONDS)
+
+
 if os.name == "nt":  # pragma: no cover - exercised on the Windows CI runners
     import msvcrt
 
     def _lock_fd(fd: int) -> None:
-        os.lseek(fd, 0, os.SEEK_SET)
-        while True:
-            try:
-                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-                return
-            except OSError:  # LK_LOCK gives up after ~10 s; keep waiting
-                continue
+        def attempt() -> None:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        lock_with_retry(attempt)
 
     def _unlock_fd(fd: int) -> None:
         os.lseek(fd, 0, os.SEEK_SET)
@@ -151,10 +173,19 @@ def read_rows(path: Path) -> list[dict]:
         return read_rows_unlocked(path)
 
 
+# New files are created owner-only (0600) on POSIX. On Windows the mode is ignored and the file
+# inherits the ACL of the plugin-data folder (normally the user's profile, private to the user).
+_FILE_MODE = 0o600
+
+
+def _open_private(path: Path, flags: int):
+    return os.fdopen(os.open(path, flags | getattr(os, "O_BINARY", 0), _FILE_MODE), "wb")
+
+
 def append_rows_unlocked(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
-    with open(path, "ab") as handle:
+    with _open_private(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT) as handle:
         handle.write(b"".join(encode_row(row) for row in rows))
 
 
@@ -165,7 +196,7 @@ def append_rows(path: Path, rows: list[dict]) -> None:
 
 def rewrite_unlocked(path: Path, rows: list[dict]) -> None:
     """Replace the file's contents in place (the lock is held, so no reader sees it mid-way)."""
-    with open(path, "wb") as handle:
+    with _open_private(path, os.O_WRONLY | os.O_TRUNC | os.O_CREAT) as handle:
         handle.write(b"".join(encode_row(row) for row in rows))
 
 
