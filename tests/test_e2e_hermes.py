@@ -88,7 +88,8 @@ def test_3_quote_the_user_never_said_is_blocked(stream, tmp_path_factory):
     assert r["memory_md"] == ""
     fake = "we ship on Friday no matter what"
     assert tool_error(r["tool_results"][0]) == block_text(
-        f'User decided to ship on Friday ("{fake}")', f'The quoted words ("{fake}") are not in anything the user said.')
+        f'User decided to ship on Friday ("{fake}")',
+        f'The quoted words ("{fake}") are not in anything the user typed in this session.')
     assert r["evidence"][0]["reason"] == "quote_not_found"
 
 
@@ -170,3 +171,25 @@ def test_9_subagent_goal_is_not_evidence(stream, tmp_path_factory):
     [row] = r["evidence"]
     assert (row["verdict"], row["reason"], row["target"]) == ("blocked", "quote_not_found", "skill:release-note")
     assert not any(path.startswith("release-note/") for path in r["skills"])
+
+
+def test_10_string_operations_are_checked(stream, tmp_path_factory):
+    r = run("string_operations", stream, tmp_path_factory)
+    # Hermes decodes the JSON string later (agent/inline_tool_executors.py:305); the gate decodes it first.
+    assert tool_error(r["tool_results"][0]) == block_text("User decided to ship on Friday.")
+    assert r["memory_md"] == ""
+    assert r["evidence"][0]["reason"] == "no_quote"
+
+
+def test_11_claim_between_inch_marks_is_blocked(stream, tmp_path_factory):
+    r = run("hidden_in_quotes", stream, tmp_path_factory)
+    assert tool_error(r["tool_results"][0]).startswith("provenance-gate: this write states a user decision")
+    assert r["memory_md"] == ""
+    assert r["evidence"][0]["verdict"] == "blocked"
+
+
+def test_12_unrelated_quote_is_blocked(stream, tmp_path_factory):
+    r = run("unrelated_quote", stream, tmp_path_factory)
+    message = tool_error(r["tool_results"][0])
+    assert "do not share key words with the decision" in message
+    assert r["memory_md"] == "" and r["evidence"][0]["reason"] == "quote_unrelated"
