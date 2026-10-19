@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      hermes_ref:
+        description: Hermes commit or branch for the hermes-tools job (empty = the pinned commit)
+        required: false
+        default: ""
   schedule:
     - cron: "17 5 * * 1"  # weekly, Monday 05:17 UTC: run the Hermes job against Hermes main
 
@@ -34,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ref: ${{ fromJSON(github.event_name == 'schedule' && '["main"]' || '["b4170e73b0bbd74b47dc567c36166d749c069699"]') }}
+        ref: ${{ fromJSON(github.event_name == 'schedule' && '["main"]' || (inputs.hermes_ref != '' && inputs.hermes_ref != null) && format('["{0}"]', inputs.hermes_ref) || '["b4170e73b0bbd74b47dc567c36166d749c069699"]') }}
     env:
       PROVENANCE_GATE_REQUIRE_E2E: "1"
     steps:
