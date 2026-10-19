@@ -18,6 +18,7 @@ def gate(tmp_path, monkeypatch):
     for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SCOPE", "PROVENANCE_GATE_RETENTION_DAYS",
                  "PROVENANCE_GATE_SEARCH"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")  # most tests here exercise block mode
     return Gate(directory=lambda: tmp_path)
 
 
@@ -208,7 +209,7 @@ def test_unreadable_said_file_means_nothing_was_typed(gate, tmp_path):
 
 
 def test_missing_data_directory_still_blocks(tmp_path, monkeypatch):
-    monkeypatch.delenv("PROVENANCE_GATE_MODE", raising=False)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")
 
     def broken():
         raise OSError("disk gone")
@@ -263,7 +264,9 @@ def test_settings_fall_back_to_defaults(monkeypatch):
     monkeypatch.setenv("PROVENANCE_GATE_MODE", "whatever")
     monkeypatch.setenv("PROVENANCE_GATE_SCOPE", "everything")
     monkeypatch.setenv("PROVENANCE_GATE_SEARCH", "everywhere")
-    assert (verdict.mode(), verdict.scope(), verdict.search_mode()) == ("block", "decisions", "session")
+    assert (verdict.mode(), verdict.scope(), verdict.search_mode()) == ("observe", "decisions", "session")
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", " BLOCK ")
+    assert verdict.mode() == "block"
     monkeypatch.setenv("PROVENANCE_GATE_MODE", " Observe ")
     monkeypatch.setenv("PROVENANCE_GATE_SCOPE", "decisions + preferences")
     monkeypatch.setenv("PROVENANCE_GATE_SEARCH", "PROFILE")
@@ -304,3 +307,12 @@ def test_block_message_truncates_long_claims():
     [check] = verdict.evaluate("memory", mem(long_claim), "s", [])
     message = verdict.block_message(check, 1)
     assert "…" in message and len(message) < 500
+
+
+def test_default_mode_is_observe(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROVENANCE_GATE_MODE", raising=False)
+    assert verdict.mode() == "observe"
+    g = Gate(directory=lambda: tmp_path)
+    assert g.pre_tool_call(tool_name="memory", args=mem("User decided to ship on Friday."), session_id="s") is None
+    [row] = evidence(tmp_path)
+    assert (row["verdict"], row["reason"]) == ("would_block", "no_quote")

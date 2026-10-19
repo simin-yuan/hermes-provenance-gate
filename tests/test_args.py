@@ -97,6 +97,7 @@ def test_coerce_operations_mirrors_hermes():
 def gate(tmp_path, monkeypatch):
     for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SCOPE", "PROVENANCE_GATE_SEARCH"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")
     return Gate(directory=lambda: tmp_path)
 
 

@@ -1,16 +1,17 @@
-"""``hermes provenance-gate log | check | purge``."""
+"""``hermes provenance-gate report | log | check | purge``."""
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
 from . import capture, store, verdict
 
-HELP = "Inspect the provenance-gate evidence log, dry-run a check, or purge stored user text"
+HELP = "Summarise or inspect the provenance-gate evidence log, dry-run a check, or purge stored user text"
 DESCRIPTION = (
     "provenance-gate keeps a local copy of the text of user messages and an evidence log under "
     "<HERMES_HOME>/plugin-data/provenance-gate/. These commands read or purge them."
@@ -28,7 +29,9 @@ def _non_negative(value: str) -> int:
 
 
 def setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="provenance_gate_command", metavar="{log,check,purge}")
+    sub = parser.add_subparsers(dest="provenance_gate_command", metavar="{report,log,check,purge}")
+    report = sub.add_parser("report", help="Count verdicts by reason and show the newest flagged claims")
+    report.add_argument("--days", type=_non_negative, default=7, help="How many days back (default 7, 0 = all)")
     log = sub.add_parser("log", help="Show recent evidence rows (newest last)")
     log.add_argument("--limit", type=_non_negative, default=20, help="How many rows to show (default 20, 0 = all)")
     log.add_argument("--verdict", choices=("pass", "blocked", "would_block"), help="Only rows with this verdict")
@@ -45,15 +48,46 @@ def setup(parser: argparse.ArgumentParser) -> None:
 def make_handler(directory: Callable[[], Path] = store.data_dir) -> Callable[[argparse.Namespace], int]:
     def handle(args: argparse.Namespace) -> int:
         command = getattr(args, "provenance_gate_command", None)
+        if command == "report":
+            return cmd_report(directory(), args.days)
         if command == "log":
             return cmd_log(directory(), args.limit, args.verdict)
         if command == "check":
             return cmd_check(directory(), args.text, args.session)
         if command == "purge":
             return cmd_purge(directory(), args.older_than, args.all)
-        print("usage: hermes provenance-gate {log,check,purge} ...")
+        print("usage: hermes provenance-gate {report,log,check,purge} ...")
         return 2
     return handle
+
+
+REPORT_NEWEST = 10
+REPORT_CLAIM_CHARS = 120
+
+
+def cmd_report(directory: Path, days: int, now=None) -> int:
+    """Counts of pass / would_block / blocked by reason, and the newest flagged claims. Read-only."""
+    rows = store.read_rows_unlocked(directory / store.EVIDENCE_FILE)
+    if days > 0:
+        cutoff = (now or store.utc_now()) - timedelta(days=days)
+        rows = [row for row in rows if (moment := store.parse_ts(row.get("ts"))) is not None and moment >= cutoff]
+    window = f"last {days} day(s)" if days > 0 else "all rows"
+    if not rows:
+        print(f"no evidence rows ({window})")
+        return 0
+    counts = Counter((row.get("verdict") or "?", row.get("reason") or "-") for row in rows)
+    print(f"evidence rows ({window}): {len(rows)}")
+    for (verdict_name, reason), count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        print(f"  {verdict_name:<12} {reason:<22} {count}")
+    flagged = [row for row in rows if row.get("verdict") in ("would_block", "blocked")][-REPORT_NEWEST:]
+    if flagged:
+        print(f"newest flagged claims (up to {REPORT_NEWEST}):")
+        for row in reversed(flagged):
+            claim = " ".join(str(row.get("claim") or "").split())
+            if len(claim) > REPORT_CLAIM_CHARS:
+                claim = claim[:REPORT_CLAIM_CHARS - 1] + "…"
+            print(f"  {row.get('ts', '?')}  {row.get('verdict')}/{row.get('reason')}  {claim}")
+    return 0
 
 
 def cmd_log(directory: Path, limit: int, verdict_filter: str | None) -> int:

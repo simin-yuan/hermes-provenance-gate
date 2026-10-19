@@ -14,6 +14,7 @@ from provenance_gate.hooks import Gate
 def run(tmp_path, monkeypatch):
     for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SEARCH", "PROVENANCE_GATE_SCOPE"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")
     parser = argparse.ArgumentParser(prog="hermes provenance-gate")
     cli.setup(parser)
     handler = cli.make_handler(lambda: tmp_path)
@@ -83,3 +84,26 @@ def test_negative_or_bad_numbers_are_rejected(run, argv, capsys):
 def test_no_subcommand(run, capsys):
     assert run() == 2
     assert "usage" in capsys.readouterr().out
+
+
+def test_report_counts_and_newest(run, tmp_path, capsys):
+    rows = [{"ts": "2099-01-01T00:00:00.000000Z", "verdict": "pass", "claim": "a"},
+            {"ts": "2099-01-01T00:00:01.000000Z", "verdict": "would_block", "reason": "no_quote", "claim": "User decided X."},
+            {"ts": "2099-01-01T00:00:02.000000Z", "verdict": "would_block", "reason": "no_quote", "claim": "User decided Y " * 20}]
+    store.append_rows(tmp_path / store.EVIDENCE_FILE, rows)
+    assert run("report", "--days", "0") == 0
+    out = capsys.readouterr().out
+    assert "evidence rows (all rows): 3" in out
+    assert "would_block  no_quote" in out and " 2" in out
+    lines = out.splitlines()
+    newest = lines.index("newest flagged claims (up to 10):")
+    assert "User decided Y" in lines[newest + 1] and lines[newest + 1].endswith("…")
+    assert "User decided X." in lines[newest + 2]
+
+
+def test_report_empty_and_window(run, tmp_path, capsys):
+    assert run("report") == 0
+    assert "no evidence rows (last 7 day(s))" in capsys.readouterr().out
+    store.append_rows(tmp_path / store.EVIDENCE_FILE, [{"ts": "2000-01-01T00:00:00Z", "verdict": "pass"}])
+    assert run("report", "--days", "7") == 0
+    assert "no evidence rows" in capsys.readouterr().out

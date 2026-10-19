@@ -29,6 +29,7 @@ def default_settings(monkeypatch):
     for name in ("PROVENANCE_GATE_MODE", "PROVENANCE_GATE_SCOPE", "PROVENANCE_GATE_RETENTION_DAYS",
                  "PROVENANCE_GATE_SEARCH"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")
 
 
 def test_corpus_sizes():

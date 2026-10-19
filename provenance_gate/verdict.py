@@ -45,8 +45,9 @@ _REASON_ORDER = (REASON_UNRELATED, REASON_TOO_SHORT, REASON_NOT_FOUND)
 
 
 def mode() -> str:
+    """``observe`` (the default: flag and log, never refuse) or ``block`` (opt-in)."""
     value = os.environ.get("PROVENANCE_GATE_MODE", "").strip().lower()
-    return MODE_OBSERVE if value == MODE_OBSERVE else MODE_BLOCK
+    return MODE_BLOCK if value == MODE_BLOCK else MODE_OBSERVE
 
 
 def scope() -> str:
