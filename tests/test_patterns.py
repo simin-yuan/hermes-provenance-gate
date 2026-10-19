@@ -124,3 +124,9 @@ def test_patterns_are_data():
                   patterns.ZH_PREFERENCE_VERBS, patterns.EN_DECISION_PHRASES):
         for name, (regex, examples) in table.items():
             assert isinstance(regex, str) and examples, name
+
+
+@pytest.mark.parametrize("hidden", ["⁣", "⁤", "᠎", "͏", "​", "­", "️", "\U000e0041"])
+def test_default_ignorable_characters_cannot_hide_a_claim(hidden):
+    from provenance_gate.claims import find_claims
+    assert find_claims(f"The user ap{hidden}proved the rollout.")

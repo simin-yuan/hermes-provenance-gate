@@ -82,8 +82,10 @@ def _thread_lock(path: Path) -> threading.Lock:
 
 LOCK_TIMEOUT_SECONDS = 30.0
 LOCK_RETRY_SECONDS = 0.05
-# errno values msvcrt.locking raises when another handle holds the byte (EACCES, EDEADLOCK).
-_CONTENTION_ERRNOS = frozenset({errno.EACCES, getattr(errno, "EDEADLOCK", 36), getattr(errno, "EDEADLK", 35)})
+# errno values a non-blocking lock attempt raises when another holder has it: msvcrt.locking
+# (EACCES, EDEADLOCK) and fcntl.flock with LOCK_NB (EWOULDBLOCK / EAGAIN).
+_CONTENTION_ERRNOS = frozenset({errno.EACCES, getattr(errno, "EDEADLOCK", 36), getattr(errno, "EDEADLK", 35),
+                                errno.EAGAIN, getattr(errno, "EWOULDBLOCK", errno.EAGAIN)})
 
 
 def lock_with_retry(try_lock: Callable[[], None], timeout: float = LOCK_TIMEOUT_SECONDS,
@@ -119,7 +121,7 @@ else:
     import fcntl
 
     def _lock_fd(fd: int) -> None:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        lock_with_retry(lambda: fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB))
 
     def _unlock_fd(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
@@ -161,11 +163,40 @@ def _decode_lines(data: bytes) -> list[dict]:
     return rows
 
 
+# Parsed rows per file, reused while the file only grows: (device, inode, size, rows).
+_row_cache: dict[str, tuple[int, int, int, list[dict]]] = {}
+_row_cache_guard = threading.Lock()
+
+
 def read_rows_unlocked(path: Path) -> list[dict]:
+    """Every readable row. Rows already parsed are reused: when the file has only grown since the
+    last read (same file, larger size), only the new bytes are parsed; a rewrite (prune, purge)
+    replaces the file and resets the cache. Callers get a fresh list each time."""
     try:
-        return _decode_lines(path.read_bytes())
+        with open(path, "rb") as handle:
+            st = os.fstat(handle.fileno())
+            key = str(path)
+            with _row_cache_guard:
+                cached = _row_cache.get(key)
+            if cached and cached[0] == st.st_dev and cached[1] == st.st_ino and cached[2] <= st.st_size:
+                handle.seek(cached[2])
+                tail = handle.read()
+                # Only whole lines are parsed; a partial last line waits for the next read.
+                cut = tail.rfind(b"\n") + 1
+                rows = cached[3] + _decode_lines(tail[:cut])
+                size = cached[2] + cut
+            else:
+                data = handle.read()
+                cut = data.rfind(b"\n") + 1
+                rows = _decode_lines(data[:cut])
+                size = cut
+                tail = data
+            trailing = _decode_lines(tail[cut:]) if cut < len(tail) else []
     except FileNotFoundError:
         return []
+    with _row_cache_guard:
+        _row_cache[key] = (st.st_dev, st.st_ino, size, rows)
+    return list(rows) + trailing
 
 
 def read_rows(path: Path) -> list[dict]:
@@ -182,11 +213,26 @@ def _open_private(path: Path, flags: int):
     return os.fdopen(os.open(path, flags | getattr(os, "O_BINARY", 0), _FILE_MODE), "wb")
 
 
+def _ends_mid_line(path: Path) -> bool:
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                return False
+            handle.seek(-1, os.SEEK_END)
+            return handle.read(1) != b"\n"
+    except FileNotFoundError:
+        return False
+
+
 def append_rows_unlocked(path: Path, rows: list[dict]) -> None:
+    """Append rows. If a crash left a torn last line, a newline is written first, so the torn
+    fragment stays one unreadable line and cannot swallow the new rows."""
     if not rows:
         return
+    prefix = b"\n" if _ends_mid_line(path) else b""
     with _open_private(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT) as handle:
-        handle.write(b"".join(encode_row(row) for row in rows))
+        handle.write(prefix + b"".join(encode_row(row) for row in rows))
 
 
 def append_rows(path: Path, rows: list[dict]) -> None:
@@ -195,9 +241,20 @@ def append_rows(path: Path, rows: list[dict]) -> None:
 
 
 def rewrite_unlocked(path: Path, rows: list[dict]) -> None:
-    """Replace the file's contents in place (the lock is held, so no reader sees it mid-way)."""
-    with _open_private(path, os.O_WRONLY | os.O_TRUNC | os.O_CREAT) as handle:
-        handle.write(b"".join(encode_row(row) for row in rows))
+    """Replace the file atomically: write a temporary file next to it, then rename over it, so a
+    crash leaves either the old or the new contents, never a truncated file."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        with _open_private(tmp, os.O_WRONLY | os.O_TRUNC | os.O_CREAT) as handle:
+            handle.write(b"".join(encode_row(row) for row in rows))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def drop_older_than_unlocked(path: Path, cutoff: datetime) -> int:

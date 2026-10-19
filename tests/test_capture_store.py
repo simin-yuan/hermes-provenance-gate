@@ -317,3 +317,33 @@ def test_leading_system_note_before_the_users_message_is_removed():
 def test_a_bracket_inside_what_the_user_typed_is_kept():
     text = "Please read [IMPORTANT: draft] before we decide"
     assert capture.typed_text(text) == text
+
+
+def test_torn_last_line_does_not_swallow_the_next_row(tmp_path):
+    path = tmp_path / store.SAID_FILE
+    path.write_bytes(store.encode_row({"ts": "2099-01-01T00:00:00Z", "text": "a"}) + b'{"ts": "2099-01-01T00:0')
+    store.append_rows(path, [{"ts": "2099-01-01T00:00:01Z", "text": "b"}])
+    assert [r["text"] for r in store.read_rows(path)] == ["a", "b"]
+
+
+def test_rewrite_is_atomic_and_leaves_no_temp_files(tmp_path):
+    path = tmp_path / store.EVIDENCE_FILE
+    store.append_rows(path, [{"ts": "2000-01-01T00:00:00Z", "x": 1}, {"ts": "2099-01-01T00:00:00Z", "x": 2}])
+    with store.locked(path):
+        store.drop_older_than_unlocked(path, store.utc_now() - timedelta(days=1))
+    assert [r["x"] for r in store.read_rows(path)] == [2]
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.endswith(".tmp")) == []
+
+
+def test_row_cache_follows_appends_and_rewrites(tmp_path):
+    path = tmp_path / store.SAID_FILE
+    store.append_rows(path, [{"ts": "2099-01-01T00:00:00Z", "n": 1}])
+    assert len(store.read_rows(path)) == 1
+    store.append_rows(path, [{"ts": "2099-01-01T00:00:01Z", "n": 2}])
+    assert [r["n"] for r in store.read_rows(path)] == [1, 2]
+    with store.locked(path):
+        store.rewrite_unlocked(path, [{"ts": "2099-01-01T00:00:02Z", "n": 3}])
+    assert [r["n"] for r in store.read_rows(path)] == [3]
+    rows = store.read_rows(path)
+    rows.append({"n": 99})  # callers get their own list
+    assert [r["n"] for r in store.read_rows(path)] == [3]

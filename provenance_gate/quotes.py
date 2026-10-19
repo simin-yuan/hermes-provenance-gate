@@ -12,6 +12,7 @@ from __future__ import annotations
 import bisect
 import re
 import unicodedata
+from functools import lru_cache
 
 from . import patterns
 
@@ -23,8 +24,17 @@ _CORNERS = (("「", "」"), ("『", "』"))
 _QUOTE_FOLD = str.maketrans({"“": '"', "”": '"', "„": '"', "‘": "'", "’": "'"})
 _TRAILING_PUNCT = re.compile(r"[\s.,!?;:。，！？；：、…]+$")
 _WS = re.compile(r"\s+")
-# Zero-width characters, the soft hyphen and the BOM are invisible and only ever hide words.
-_INVISIBLE = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"))
+# Unicode Default_Ignorable_Code_Point (DerivedCoreProperties.txt): invisible characters that only
+# ever hide words (soft hyphen, zero-width and joiner characters, bidi controls, variation
+# selectors, invisible operators U+2061-2064, Mongolian FVS/U+180E, combining grapheme joiner
+# U+034F, Hangul fillers, tag characters, the BOM ...). All are removed before detection.
+_DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
+    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+)
+_INVISIBLE = {code: None for lo, hi in _DEFAULT_IGNORABLE_RANGES for code in range(lo, hi + 1)}
 _LATIN_WORD = re.compile(r"[^\W\d_]+")
 _SPACE_INSIDE = re.compile(r"\S\s+\S")
 
@@ -133,7 +143,9 @@ def remove_spans(text: str, spans: list[tuple[int, int, str]]) -> str:
 
 # --- matching ------------------------------------------------------------------------------
 
+@lru_cache(maxsize=65536)
 def normalize(text: str) -> str:
+    """Matching form (cached: captured messages are normalized again on every check)."""
     text = detection_form(text).translate(_QUOTE_FOLD)
     return _WS.sub(" ", text).strip().casefold()
 
