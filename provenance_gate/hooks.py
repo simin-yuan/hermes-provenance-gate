@@ -25,13 +25,13 @@ class Gate:
         self.resolver = results.DiskResolver()
 
     def pre_llm_call(self, session_id: str = "", user_message: Any = None, platform: str = "",
-                     sender_id: str = "", **_: Any) -> None:
+                     sender_id: str = "", parent_session_id: str = "", **_: Any) -> None:
         """Record what the user typed this turn. Never returns context."""
         try:
             if (platform or "") in capture.NON_USER_PLATFORMS:
                 return None
             capture.capture(self._directory(), str(session_id or ""), user_message,
-                            sender_id=str(sender_id or ""))
+                            sender_id=str(sender_id or ""), parent_session_id=str(parent_session_id or ""))
         except Exception:
             logger.warning("provenance-gate: capture failed (ignored)", exc_info=True)
         return None

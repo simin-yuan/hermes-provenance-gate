@@ -76,11 +76,26 @@ class ClaimCheck:
 class Evidence:
     """The captured messages a quote may come from, prepared once per call."""
 
+    MAX_CHAIN = 32
+
+    @classmethod
+    def session_chain(cls, said: list[dict], session_id: str) -> set[str]:
+        """``session_id`` and the sessions it continues after context compression (each row may
+        carry the ``parent_session_id`` that pre_llm_call reported)."""
+        parents = {row.get("session_id"): row.get("parent_session_id") for row in said if row.get("parent_session_id")}
+        chain, current = set(), session_id
+        while current and current not in chain and len(chain) < cls.MAX_CHAIN:
+            chain.add(current)
+            current = parents.get(current)
+        return chain
+
     def __init__(self, said: list[dict], session_id: str, search: str):
-        mine = [row for row in said if session_id and row.get("session_id") == session_id]
+        chain = self.session_chain(said, session_id) if session_id else set()
+        said = [row for row in said if row.get("text")]
+        mine = [row for row in said if row.get("session_id") in chain]
         self.session = quotes.Messages(list(reversed(mine)))
         self.recent = quotes.Messages(list(reversed(mine[-RECENT_FOR_SHORT_QUOTES:])))
-        others = [row for row in said if not (session_id and row.get("session_id") == session_id)]
+        others = [row for row in said if row.get("session_id") not in chain]
         self.others = quotes.Messages(list(reversed(others))) if search == SEARCH_PROFILE else None
         self._cache: dict[str, tuple[str, dict | None, str | None]] = {}
 

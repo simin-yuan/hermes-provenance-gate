@@ -206,22 +206,32 @@ def _is_duplicate(rows: list[dict], session_id: str, text: str, now: datetime) -
 
 
 def capture(directory: Path, session_id: str, user_message: Any, now: datetime | None = None,
-            retention_days: int | None = None, sender_id: str = "") -> dict | None:
+            retention_days: int | None = None, sender_id: str = "", parent_session_id: str = "") -> dict | None:
     """Append the turn's typed text to ``said.jsonl``; returns the row, or None when skipped
-    (nothing typed, or the same text for the same session within two seconds)."""
+    (nothing typed, or the same text for the same session within two seconds). A session started by
+    context compression carries ``parent_session_id``; it is stored with the row (and alone, with
+    empty text, once per session when the turn has no typed text) so quotes from before
+    compression stay in reach (verdict.Evidence)."""
     text = typed_text(message_text(user_message))
-    if not text:
+    link = bool(parent_session_id) and parent_session_id != session_id
+    if not text and not link:
         return None
     now = now or store.utc_now()
     session_id = session_id or ""
     path = directory / store.SAID_FILE
     with store.locked(path):
         store.maybe_prune_unlocked(path, now, retention_days or store.retention_days())
-        if _is_duplicate(store.read_rows_unlocked(path), session_id, text, now):
+        rows = store.read_rows_unlocked(path)
+        if not text and any(r.get("session_id") == session_id and r.get("parent_session_id") == parent_session_id
+                            for r in rows):
+            return None  # nothing typed and the compression link is already recorded
+        if text and _is_duplicate(rows, session_id, text, now):
             return None
         ts = store.format_ts(now)
         row = {"ts": ts, "session_id": session_id, "sender_id": sender_id or "",
                "msg_id": message_id(session_id, ts, text), "text": text}
+        if parent_session_id and parent_session_id != session_id:
+            row["parent_session_id"] = parent_session_id
         store.append_rows_unlocked(path, [row])
     return row
 

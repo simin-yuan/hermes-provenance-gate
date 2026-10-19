@@ -329,3 +329,21 @@ def test_negated_fragment_and_second_claim_are_blocked(gate, tmp_path):
     rows = evidence(tmp_path)[-1:]
     assert rows[0]["reason"] == "no_quote" and "approved deleting" in rows[0]["claim"]
     assert write(gate, f'User decided to ship on Friday and drop IE ("{DECIDE}").') is None
+
+
+def test_quotes_from_before_compression_count_in_session_search(gate, tmp_path):
+    gate.pre_llm_call(session_id="old", user_message=DECIDE)
+    # compression starts session "new"; its first turn reports the parent
+    gate.pre_llm_call(session_id="new", user_message="ok go on", parent_session_id="old")
+    assert write(gate, f'User decided to ship on Friday ("{DECIDE}")', session="new") is None
+    # an unrelated session cannot borrow it
+    assert write(gate, f'User decided to ship on Friday ("{DECIDE}")', session="other")["action"] == "block"
+
+
+def test_a_compression_link_is_kept_even_without_typed_text(gate, tmp_path):
+    gate.pre_llm_call(session_id="old", user_message=DECIDE)
+    gate.pre_llm_call(session_id="new", user_message="[System: Continue now.]", parent_session_id="old")
+    gate.pre_llm_call(session_id="new", user_message="[System: Continue now.]", parent_session_id="old")
+    rows = capture.said_rows(tmp_path)
+    assert [r["text"] for r in rows] == [DECIDE, ""] and rows[1]["parent_session_id"] == "old"
+    assert write(gate, f'User decided to ship on Friday ("{DECIDE}")', session="new") is None
