@@ -152,6 +152,7 @@ def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evide
     if not matches:
         return []  # the decision words were inside the user's own quoted words
     out: list[ClaimCheck] = []
+    matches = matches[:MAX_CLAIMS_PER_CALL + 1]  # evaluate() stops at the cap anyway
     for index, (start, found) in enumerate(matches):
         lo = 0 if index == 0 else start
         hi = matches[index + 1][0] if index + 1 < len(matches) else len(sentence)

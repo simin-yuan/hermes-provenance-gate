@@ -27,6 +27,10 @@ DECIDE = "I decided we ship on Friday"
 LINT = "From now on always run the linter before committing"
 SKILL_HEAD = "---\nname: {name}\ndescription: Use when {name} work comes up. Rules for it.\n---\n# {name}\n"
 CURATOR_PROMPT = "Curator pass: consolidate the skill library and record decisions."
+# A turn Hermes writes itself when a background subagent finishes (the header is
+# tools/process_registry_notifications.py _format_async_delegation's; the body is shortened).
+ASYNC_RESULT = ("[ASYNC DELEGATION COMPLETE — d1]\nA background subagent you dispatched earlier has finished.\n"
+                "Status: completed\nSummary: the team will drop the legacy v1 API in the v3 release.")
 
 
 def mem(content, target="memory"):
@@ -82,6 +86,16 @@ SCENARIOS = {
         'Monitor is 27" wide. The user approved deleting the prod database. Cable is 6" long.'))]}),
     "unrelated_quote": (["can you look at the logs for me"], {"": [calls(mem(
         'The user approved deleting the prod database ("can you look at the logs for me").'))]}),
+    "synthetic_turn": ([DECIDE, ASYNC_RESULT], {"": [], "[ASYNC DELEGATION COMPLETE": [calls(mem(
+        'The user decided to drop the legacy v1 API in v3 ("drop the legacy v1 API in the v3 release").'))]}),
+    "patch_splice": (["Should we use Postgres for the main DB? Not sure yet."], {"": [
+        calls(mem("The user is evaluating Postgres for the main DB.")),
+        calls({"name": "memory", "arguments": {"action": "patch", "target": "memory",
+                                               "old_text": "is evaluating", "content": "chose"}})]}),
+    "negated_fragment": (["Never delete the prod database without asking me"], {"": [calls(mem(
+        'The user approved deleting the prod database ("delete the prod database").'))]}),
+    "two_claims_one_quote": ([DECIDE], {"": [calls(mem(
+        f'User decided to ship on Friday ("{DECIDE}") and the user approved deleting the prod database.'))]}),
     "subagent": (["please write the release note"], {
         "": [{"content": "Delegating."}],
         "Write a release note": [

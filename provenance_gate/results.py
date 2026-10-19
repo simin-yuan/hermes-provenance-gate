@@ -10,7 +10,8 @@ the way the tools compute it and returns the text to check:
   ``<HERMES_HOME>/memories/MEMORY.md`` / ``USER.md`` (tools/memory_tool_store.py:25 and :299); the
   entry is the one containing ``old_text``, an exact whole-entry match first
   (``MemoryStore._locate``), and the span is replaced once (``_patch_entry``, :146-159).
-- skill: every paragraph of the patched file that contains a replaced span. The skill is found with
+- skill: every line of the patched file that contains a replaced span (the lines around a
+  deletion point count too). The skill is found with
   the public ``tools.skills_tool.skill_search_dirs`` / ``locate_skill`` (documented for plugins in
   website/docs/developer-guide/plugins/index.md, "Read the skill catalog"); ``file_path`` defaults
   to ``SKILL.md`` and must stay inside the skill directory.
@@ -27,7 +28,7 @@ import re
 from pathlib import Path
 
 ENTRY_DELIMITER = "\n§\n"
-_PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n")
+
 
 
 def patched_entry(entries: list[str], old_text: str, new_text: str) -> str | None:
@@ -43,14 +44,15 @@ def patched_entry(entries: list[str], old_text: str, new_text: str) -> str | Non
     return entries[index].replace(old_text, new_text, 1)
 
 
-def patched_paragraphs(original: str, old: str, new: str, replace_all: bool = False) -> str | None:
-    """The paragraphs of the patched text that contain a replaced span (joined by blank lines)."""
+def patched_lines(original: str, old: str, new: str, replace_all: bool = False) -> str | None:
+    """The lines of the patched text that contain a replaced span, joined by newlines (a line
+    touched twice appears once). Lines the patch does not touch are not returned."""
     if not old or old not in original:
         return None
     pieces, spans, last, pos = [], [], 0, original.find(old)
     while pos != -1:
         pieces.append(original[last:pos])
-        start = sum(map(len, pieces)) + sum(len(new) for _ in spans)
+        start = sum(map(len, pieces)) + len(new) * len(spans)
         spans.append((start, start + len(new)))
         last = pos + len(old)
         if not replace_all:
@@ -58,14 +60,16 @@ def patched_paragraphs(original: str, old: str, new: str, replace_all: bool = Fa
         pos = original.find(old, last)
     pieces.append(original[last:])
     result = new.join(pieces)
-    breaks = [(m.start(), m.end()) for m in _PARAGRAPH_BREAK.finditer(result)]
     chosen: list[tuple[int, int]] = []
     for start, end in spans:
-        left = max((b_end for b_start, b_end in breaks if b_end <= start), default=0)
-        right = min((b_start for b_start, b_end in breaks if b_start >= end), default=len(result))
+        left = result.rfind("\n", 0, start) + 1
+        if end > start and result[end - 1] == "\n":
+            end -= 1  # a replacement ending in a newline does not touch the next line
+        right = result.find("\n", end)
+        right = len(result) if right == -1 else right
         if (left, right) not in chosen:
             chosen.append((left, right))
-    return "\n\n".join(result[a:b] for a, b in sorted(chosen))
+    return "\n".join(result[a:b] for a, b in sorted(chosen))
 
 
 class DiskResolver:
@@ -105,4 +109,4 @@ class DiskResolver:
             original = target.read_text(encoding="utf-8").replace("\r\n", "\n")
         except OSError:
             return None
-        return patched_paragraphs(original, old.replace("\r\n", "\n"), new.replace("\r\n", "\n"), replace_all)
+        return patched_lines(original, old.replace("\r\n", "\n"), new.replace("\r\n", "\n"), replace_all)

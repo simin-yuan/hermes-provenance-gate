@@ -290,7 +290,10 @@ def is_question(text: str) -> bool:
     return _strip_tags(text).rstrip(" \t)]）】*_\"'”’").endswith(("?", "？"))
 
 
-def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS) -> list[tuple[int, Claim]]:
+MAX_MATCHES = 101  # the caller never uses more (verdict.MAX_CLAIMS_PER_CALL + 1)
+
+
+def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS, limit: int = MAX_MATCHES) -> list[tuple[int, Claim]]:
     """Every claim match in ``sentence`` (already in detection form) that passes the exemptions,
     as ``(start offset, Claim)`` in order of position; overlapping matches count once. Quoted
     text is NOT masked here: the caller removes verified quotes."""
@@ -302,11 +305,15 @@ def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS) -> list[tupl
     zh_data_line = "=" in sentence or any(marker in sentence for marker in patterns.ZH_SOURCE_MARKERS)
     found: list[tuple[int, int, Claim]] = []
     for lang, kind, regex, names in _compiled(scope):
+        kept = 0
         for match in regex.finditer(sentence):
+            if kept >= limit:
+                break  # matches come in order: the first ``limit`` by position are already kept
             ok = ((not zh_data_line and _zh_subject_ok(sentence, match)) if lang == "zh"
                   else _en_subject_ok(sentence, match, phrase=lang == "en-phrase"))
             if ok:
                 found.append((match.start(), match.end(), Claim(sentence=sentence_in, pattern=names[match.lastgroup], kind=kind)))
+                kept += 1
     found.sort(key=lambda item: (item[0], -item[1]))
     out: list[tuple[int, Claim]] = []
     last_end = -1
@@ -314,7 +321,7 @@ def find_claim_matches(sentence: str, scope: str = SCOPE_DECISIONS) -> list[tupl
         if start >= last_end:
             out.append((start, claim))
             last_end = end
-    return out
+    return out[:limit]
 
 
 def find_claim(sentence: str, scope: str = SCOPE_DECISIONS) -> Claim | None:
