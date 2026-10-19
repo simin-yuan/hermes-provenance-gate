@@ -1,4 +1,11 @@
-"""The two Hermes hooks. Both fail open: an internal error is logged and the hook returns None."""
+"""The two Hermes hooks.
+
+``pre_llm_call`` only records what the user typed; an error there is logged and ignored.
+``pre_tool_call`` decides first and logs second: the verdict never depends on the evidence log
+being writable, and an error after a block verdict cannot turn it into an allow. A memory or
+skill_manage call whose arguments cannot be read, or that the checker fails on, is refused
+(fail closed); every other tool is ignored.
+"""
 
 from __future__ import annotations
 
@@ -17,44 +24,77 @@ class Gate:
         self.blocks = verdict.BlockCounter()
 
     def pre_llm_call(self, session_id: str = "", user_message: Any = None, platform: str = "",
-                     **_: Any) -> None:
-        """Record what the user said this turn. Never returns context."""
+                     sender_id: str = "", **_: Any) -> None:
+        """Record what the user typed this turn. Never returns context."""
         try:
             if (platform or "") in capture.NON_USER_PLATFORMS:
                 return None
-            capture.capture(self._directory(), session_id or "", user_message)
+            capture.capture(self._directory(), str(session_id or ""), user_message,
+                            sender_id=str(sender_id or ""))
         except Exception:
             logger.warning("provenance-gate: capture failed (ignored)", exc_info=True)
         return None
 
+    def _said(self, directory: Path | None) -> list[dict]:
+        """Captured rows; an unreadable store counts as "nothing typed" (claims then fail)."""
+        if directory is None:
+            return []
+        try:
+            return capture.said_rows(directory)
+        except Exception:
+            logger.warning("provenance-gate: said.jsonl unreadable; treating as empty", exc_info=True)
+        try:
+            return capture.said_rows(directory, lock=False)
+        except Exception:
+            return []
+
     def pre_tool_call(self, tool_name: str = "", args: Any = None, session_id: str = "",
                       turn_id: str = "", **_: Any) -> dict | None:
+        if tool_name not in verdict.GATED_TOOLS:
+            return None
+        session_id, turn_id = str(session_id or ""), str(turn_id or "")
         try:
-            return self._check(tool_name, args, session_id or "", turn_id or "")
+            directory = self._directory()
         except Exception:
-            logger.warning("provenance-gate: check failed for %s (allowed)", tool_name, exc_info=True)
-            return None
-
-    def _check(self, tool_name: str, args: Any, session_id: str, turn_id: str) -> dict | None:
-        if tool_name not in verdict.GATED_TOOLS or not verdict.added_texts(tool_name, args):
-            return None
-        directory = self._directory()
-        checks = verdict.evaluate(tool_name, args, session_id, capture.said_rows(directory), verdict.scope())
+            logger.warning("provenance-gate: plugin data directory unavailable", exc_info=True)
+            directory = None
+        search = verdict.search_mode()
+        try:
+            checks = verdict.evaluate(tool_name, args, session_id, self._said(directory), verdict.scope(), search)
+        except verdict.ArgError as exc:
+            checks = [verdict.failure(tool_name, verdict.REASON_UNREADABLE, str(exc))]
+        except Exception:
+            logger.error("provenance-gate: check failed for %s; refusing the write", tool_name, exc_info=True)
+            checks = [verdict.failure(tool_name, verdict.REASON_INTERNAL, "")]
         if not checks:
             return None
         failed = [check for check in checks if not check.ok]
-        now = store.utc_now()
         observe = verdict.mode() == verdict.MODE_OBSERVE
+        result = None
         if failed and not observe:
-            rows = [verdict.evidence_row(c, tool_name, session_id, "blocked", now) for c in failed]
-        else:
-            rows = [verdict.evidence_row(c, tool_name, session_id, "pass" if c.ok else "would_block", now)
-                    for c in checks]
-        path = directory / store.EVIDENCE_FILE
-        with store.locked(path):
-            store.maybe_prune_unlocked(path, now, store.retention_days())
-            store.append_rows_unlocked(path, rows)
-        if not failed or observe:
-            return None
-        attempts = self.blocks.bump(session_id, turn_id, failed[0].target)
-        return {"action": "block", "message": verdict.block_message(failed[0], attempts)}
+            try:
+                message = verdict.block_message(failed[0], self.blocks.bump(session_id, turn_id, failed[0].target), search)
+            except Exception:
+                logger.error("provenance-gate: could not build the block message", exc_info=True)
+                message = "provenance-gate: this write could not be checked. Nothing was written."
+            result = {"action": "block", "message": message}
+        self._log(directory, checks, failed, observe, tool_name, session_id)
+        return result
+
+    def _log(self, directory: Path | None, checks, failed, observe: bool, tool_name: str, session_id: str) -> None:
+        """Append evidence rows. A failure here is logged; it never changes the verdict."""
+        try:
+            now = store.utc_now()
+            if failed and not observe:
+                rows = [verdict.evidence_row(c, tool_name, session_id, "blocked", now) for c in failed]
+            else:
+                rows = [verdict.evidence_row(c, tool_name, session_id, "pass" if c.ok else "would_block", now)
+                        for c in checks]
+            if directory is None:
+                raise OSError("no plugin data directory")
+            path = directory / store.EVIDENCE_FILE
+            with store.locked(path):
+                store.maybe_prune_unlocked(path, now, store.retention_days())
+                store.append_rows_unlocked(path, rows)
+        except Exception:
+            logger.warning("provenance-gate: could not write the evidence log (verdict unchanged)", exc_info=True)
