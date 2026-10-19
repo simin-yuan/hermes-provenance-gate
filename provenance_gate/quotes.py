@@ -84,6 +84,20 @@ def is_short(quote: str) -> bool:
     return quote_size(quote) < SHORT_QUOTE_LIMIT
 
 
+_JOINERS = "-_./'"
+
+
+def _word_continues(text: str, index: int, step: int) -> bool:
+    """The Latin word at the edge of a match continues at ``text[index]`` (directly, or across a
+    joiner such as ``atlas-core``, ``v2.0`` or ``don't``)."""
+    if not 0 <= index < len(text):
+        return False
+    if _word_char(text[index]):
+        return True
+    nxt = index + step
+    return text[index] in _JOINERS and 0 <= nxt < len(text) and _word_char(text[nxt])
+
+
 def occurs_in(quote_norm: str, message_norm: str) -> bool:
     """``quote_norm`` occurs in ``message_norm`` without cutting a Latin word in half."""
     if not quote_norm:
@@ -91,8 +105,8 @@ def occurs_in(quote_norm: str, message_norm: str) -> bool:
     start = message_norm.find(quote_norm)
     while start != -1:
         end = start + len(quote_norm)
-        cut_left = start > 0 and _word_char(message_norm[start - 1]) and _word_char(quote_norm[0])
-        cut_right = end < len(message_norm) and _word_char(message_norm[end]) and _word_char(quote_norm[-1])
+        cut_left = _word_char(quote_norm[0]) and _word_continues(message_norm, start - 1, -1)
+        cut_right = _word_char(quote_norm[-1]) and _word_continues(message_norm, end, 1)
         if not cut_left and not cut_right:
             return True
         start = message_norm.find(quote_norm, start + 1)

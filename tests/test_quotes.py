@@ -42,6 +42,18 @@ def test_occurs_in_respects_latin_word_boundaries():
     assert quotes.occurs_in(quotes.normalize_quote("周五发布"), quotes.normalize("我们周五发布吧"))
 
 
+def test_occurs_in_does_not_cut_joined_words():
+    def found(quote, message):
+        return quotes.occurs_in(quotes.normalize_quote(quote), quotes.normalize(message))
+    assert not found("rename the package to atlas", "yes, rename the package to atlas-core")
+    assert not found("freeze it until version 2", "freeze it until version 2.0")
+    assert not found("core is the new name", "atlas-core is the new name")
+    assert not found("we won", "we won't ship it")
+    assert found("rename the package to atlas-core", "yes, rename the package to atlas-core")
+    assert found("ship it on Friday", "ok - ship it on Friday. thanks")
+    assert not found("ship it on Friday", "ship it on Friday/Saturday? no idea")
+
+
 def test_quote_size():
     assert quotes.quote_size("ship it now please") == 4
     assert quotes.quote_size("yes") == 1
