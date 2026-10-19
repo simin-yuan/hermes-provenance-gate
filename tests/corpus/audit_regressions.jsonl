@@ -1,0 +1,100 @@
+{"text": "The user decided to move the weekly sync to Thursdays.", "claim": true}
+{"text": "User approved the new pricing page copy.", "claim": true}
+{"text": "The owner chose AWS over GCP for the staging cluster.", "claim": true}
+{"text": "The user confirmed that invoices should be sent on the 1st.", "claim": true}
+{"text": "Owner vetoed adding a cookie banner to the docs site.", "claim": true}
+{"text": "The user asked me to archive the 2024 Q3 reports.", "claim": true}
+{"text": "The user told me to stop opening PRs on Fridays.", "claim": true}
+{"text": "The user agreed to drop Python 3.9 support in the next release.", "claim": true}
+{"text": "The user signed off on the onboarding email sequence.", "claim": true}
+{"text": "The user rejected the proposal to rename the CLI.", "claim": true}
+{"text": "Per the user, the beta stays invite-only until December.", "claim": true}
+{"text": "The user's decision: keep the monorepo.", "claim": true}
+{"text": "According to the user's instructions, backups run at 02:00 UTC.", "claim": true}
+{"text": "The owner gave the go-ahead to migrate the blog to Astro.", "claim": true}
+{"text": "The user greenlit hiring a contractor for the iOS app.", "claim": true}
+{"text": "User said yes to enabling 2FA for all admins.", "claim": true}
+{"text": "The user OK'd spending up to $200 on GPU credits this month.", "claim": true}
+{"text": "The user wants us to write all new services in Go.", "claim": true}
+{"text": "The user instructed me to never push directly to main.", "claim": true}
+{"text": "Today the user decided to freeze the public API.", "claim": true}
+{"text": "After the demo, the owner approved the new logo.", "claim": true}
+{"text": "The user has decided not to renew the Figma licence.", "claim": true}
+{"text": "Usually we wait for QA, but the user approved shipping tonight.", "claim": true}
+{"text": "Each time I asked, the user approved the dependency bumps.", "claim": true}
+{"text": "**The user** approved the migration plan.", "claim": true}
+{"text": "The user (Dana) approved the budget for the new laptops.", "claim": true}
+{"text": "User decided: Postgres.", "claim": true}
+{"text": "The user really approved the rollback this time.", "claim": true}
+{"text": "用户决定下个月起改用飞书。", "claim": true}
+{"text": "老板批准了年会预算。", "claim": true}
+{"text": "用户确认发票每月一号开。", "claim": true}
+{"text": "用户同意先上线英文版。", "claim": true}
+{"text": "老板拍板用对象存储做备份。", "claim": true}
+{"text": "用户要求所有接口都加鉴权。", "claim": true}
+{"text": "用户让我把旧日志全部归档。", "claim": true}
+{"text": "用户否决了改版首页的方案。", "claim": true}
+{"text": "用户选择了按年付费。", "claim": true}
+{"text": "主人指示我每天早上发一份简报。", "claim": true}
+{"text": "用户决定：周五发布。", "claim": true}
+{"text": "用户已经明确地决定不再支持 IE。", "claim": true}
+{"text": "The user's home directory is /home/dev.", "claim": false}
+{"text": "Deploys use GitHub Actions with OIDC to AWS.", "claim": false}
+{"text": "Spec: when the user confirmed the email, show the welcome screen.", "claim": false}
+{"text": "In the checkout flow the user chose a shipping method before paying.", "claim": false}
+{"text": "QA note: the user approved column shows NULL for legacy rows.", "claim": false}
+{"text": "The `user_approved` field defaults to false.", "claim": false}
+{"text": "Upstream issue #881 says the maintainer approved the backport.", "claim": false}
+{"text": "The repo owner approved my PR to the docs.", "claim": false}
+{"text": "Customer interview: the owner of the bakery decided to switch POS vendors.", "claim": false}
+{"text": "Users decided to stay on the free tier, according to the survey.", "claim": false}
+{"text": "If the user approves, we will start the migration on Monday.", "claim": false}
+{"text": "The user has not decided on a hosting provider yet.", "claim": false}
+{"text": "Ask the user whether they agreed to the new terms.", "claim": false}
+{"text": "Did the user confirm the meeting time?", "claim": false}
+{"text": "The user prefers short commit messages.", "claim": false}
+{"text": "The user likes dark mode in every editor.", "claim": false}
+{"text": "The build confirmed that all 412 tests pass.", "claim": false}
+{"text": "CI decided to retry the flaky job twice.", "claim": false}
+{"text": "The model chose the wrong tool and I corrected it.", "claim": false}
+{"text": "Release date: to be confirmed by the user.", "claim": false}
+{"text": "| Step | Actor |\n|---|---|\n| User confirmed the order | checkout.js |", "claim": false}
+{"text": "```python\n# the user approved the dialog\nif approved: save()\n```", "claim": false}
+{"text": "user_confirmed: false", "claim": false}
+{"text": "The user signed off with 'cheers' at the end of the email.", "claim": false}
+{"text": "The user may decide to move to Fly.io later.", "claim": false}
+{"text": "Analytics: 41% of users approved push notifications.", "claim": false}
+{"text": "When a user confirms the PIN, the app unlocks.", "claim": false}
+{"text": "The user's timezone is Europe/Berlin.", "claim": false}
+{"text": "The user is evaluating Postgres and SQLite for the side project.", "claim": false}
+{"text": "Pending: the user will choose between two logo options next week.", "claim": false}
+{"text": "The user asked whether we can ship on Friday.", "claim": false}
+{"text": "Note to self: the user once mentioned a cat named Miso.", "claim": false}
+{"text": "The owner field in the CRM is required.", "claim": false}
+{"text": "The user approved flag is stored in the orders table.", "claim": false}
+{"text": "Bug #12: the user confirmed the address but the form reset.", "claim": false}
+{"text": "The user's GitHub handle is octo-dev.", "claim": false}
+{"text": "The project uses pnpm workspaces.", "claim": false}
+{"text": "Rate limit for the API is 60 requests per minute.", "claim": false}
+{"text": "The user never confirmed the hotel booking.", "claim": false}
+{"text": "Whether the user approved the budget is still unclear.", "claim": false}
+{"text": "用户的时区是北京时间。", "claim": false}
+{"text": "用户确认码有效期为 5 分钟。", "claim": false}
+{"text": "用户批准率上个月是 37%。", "claim": false}
+{"text": "设备上的用户指示灯在待机时为蓝色。", "claim": false}
+{"text": "用户同意书模板放在 legal/ 目录。", "claim": false}
+{"text": "数据字典：用户同意时间 = consent_at。", "claim": false}
+{"text": "用户确认收货后，订单完成。", "claim": false}
+{"text": "用户同意隐私政策才能注册。", "claim": false}
+{"text": "测试中用户选择了蓝色按钮。", "claim": false}
+{"text": "仓库主人同意了合并请求。", "claim": false}
+{"text": "如果用户同意，就周五发布。", "claim": false}
+{"text": "发布日期待用户确认。", "claim": false}
+{"text": "用户还没决定用哪个数据库。", "claim": false}
+{"text": "用户是否同意还不清楚。", "claim": false}
+{"text": "用户喜欢简短的回答。", "claim": false}
+{"text": "新用户确认邮箱后才能登录。", "claim": false}
+{"text": "老板同意的报销单要在月底前提交。", "claim": false}
+{"text": "用户决定的语言设置会同步到所有设备。", "claim": false}
+{"text": "用户拒绝了推送权限的比例是 41%。", "claim": false}
+{"text": "用户确认支付的回调可能重复，需要幂等处理。", "claim": false}
