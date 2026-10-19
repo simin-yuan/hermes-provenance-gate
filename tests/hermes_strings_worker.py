@@ -29,7 +29,10 @@ def main() -> None:
 
     from gateway.run import _build_document_context_note
     from gateway.run_inbound import GatewayInboundMixin, discord_triggering_note
-    from gateway.run_inbound_transcription import GatewayInboundTranscriptionMixin
+    try:  # split out of run_inbound.py after v0.22.2
+        from gateway.run_inbound_transcription import GatewayInboundTranscriptionMixin
+    except ImportError:
+        GatewayInboundTranscriptionMixin = GatewayInboundMixin
     from agent.skill_commands import _build_skill_message, _load_skill_payload, build_skill_invocation_message
 
     out: dict[str, str] = {}
