@@ -17,17 +17,28 @@ DESCRIPTION = (
 )
 
 
+def _non_negative(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a whole number") from None
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"{number} is negative")
+    return number
+
+
 def setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="provenance_gate_command", metavar="{log,check,purge}")
     log = sub.add_parser("log", help="Show recent evidence rows (newest last)")
-    log.add_argument("--limit", type=int, default=20, help="How many rows to show (default 20)")
+    log.add_argument("--limit", type=_non_negative, default=20, help="How many rows to show (default 20, 0 = all)")
     log.add_argument("--verdict", choices=("pass", "blocked", "would_block"), help="Only rows with this verdict")
     check = sub.add_parser("check", help="Dry-run the gate on some text against captured messages; writes nothing")
     check.add_argument("text", help="Text a memory or skill write would add")
-    check.add_argument("--session", default="", help="Session id to treat as the current session")
+    check.add_argument("--session", default="", help="Session id to search (with PROVENANCE_GATE_SEARCH=session, "
+                       "the default, quotes are looked up only in this session)")
     purge = sub.add_parser("purge", help="Delete stored user text and evidence rows")
     group = purge.add_mutually_exclusive_group(required=True)
-    group.add_argument("--older-than", type=int, metavar="DAYS", help="Delete rows older than DAYS days")
+    group.add_argument("--older-than", type=_non_negative, metavar="DAYS", help="Delete rows older than DAYS days")
     group.add_argument("--all", action="store_true", help="Delete everything")
 
 
@@ -59,8 +70,9 @@ def cmd_log(directory: Path, limit: int, verdict_filter: str | None) -> int:
 
 def cmd_check(directory: Path, text: str, session_id: str) -> int:
     said = capture.said_rows(directory, lock=False)
+    search = verdict.search_mode()
     checks = verdict.evaluate("memory", {"action": "add", "target": "memory", "content": text},
-                              session_id, said, verdict.scope())
+                              session_id, said, verdict.scope(), search)
     if not checks:
         print("no decision claims: pass")
         return 0
@@ -76,7 +88,7 @@ def cmd_check(directory: Path, text: str, session_id: str) -> int:
         print("verdict: pass")
         return 0
     print(f"verdict: {'would_block' if verdict.mode() == verdict.MODE_OBSERVE else 'block'}")
-    print(verdict.block_message(failed[0], 1))
+    print(verdict.block_message(failed[0], 1, search))
     return 1
 
 
@@ -89,6 +101,6 @@ def cmd_purge(directory: Path, older_than: int | None, purge_all: bool) -> int:
                 removed = len(store.read_rows_unlocked(path))
                 store.rewrite_unlocked(path, [])
             else:
-                removed = store.drop_older_than_unlocked(path, now - timedelta(days=max(older_than or 0, 0)))
+                removed = store.drop_older_than_unlocked(path, now - timedelta(days=older_than or 0))
         print(f"{name}: removed {removed} row(s)")
     return 0
