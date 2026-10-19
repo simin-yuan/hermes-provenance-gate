@@ -21,7 +21,23 @@ before the row is stored (strings as built at Hermes b4170e73):
 - the shared-chat sender label ``[Name] `` and channel backfill before ``[New message]``
   (gateway/run_inbound.py:1400-1403);
 - skill invocation bodies, keeping only the user's own instruction (agent/skill_commands.py
-  markers :49-70, builders :366-418 and :816-826, gateway auto-load gateway/run_turn_prepare.py:484-503; the CLI sends them from cli.py:1342).
+  markers :49-70, builders :366-418 and :816-826, gateway auto-load gateway/run_turn_prepare.py:484-503; the CLI sends them from cli.py:1342);
+- leading system notes Hermes puts before the user's new message, ``[System note: …]`` /
+  ``[System: …]`` followed by a blank line (gateway/run.py:1039-1079 resume note,
+  gateway/run_turn_runner.py:891 interrupted-turn note).
+
+Hermes also sends whole turns that the user did not type. A turn whose remaining text starts with
+one of these headers is not captured at all (``SYNTHETIC_TURN_PREFIXES``): Hermes' own list of
+"scaffolding user rows that carry no real user words" (agent/context_compressor.py:937-940) —
+``[System:``, ``[CONTEXT``, ``[PRIOR CONTEXT``, ``[IMPORTANT: Background``, ``[Your active task
+list``, ``[Planning state preserved``, ``[ASYNC DELEGATION``, ``[OUT-OF-BAND``, ``Cronjob
+Response:`` — plus background-process notices (tools/process_registry_notifications.py:463-510:
+``[IMPORTANT: …]``, ``[Background process … heartbeat``), async delegation results
+(:280-318, ``[ASYNC DELEGATION COMPLETE — …]``), /goal and kanban continuation prompts
+(hermes_cli/goals.py:60-110 and :1592, ``[Continuing toward …``), the goal kick (:979,
+``[Goal set]``), heartbeat prompts (hermes_cli/heartbeat.py:22-26, ``[Heartbeat — …``), any
+other ``[System note:`` turn, and cron / webhook deliveries (cron/scheduler_delivery.py:191,
+gateway/platforms/webhook.py:1058). Kinds not listed here may still be captured.
 
 A message made only of such blocks stores nothing. Removing too much only means fewer words can
 serve as evidence; nothing here can add text the user did not type.
@@ -69,6 +85,16 @@ _BUNDLE_USER_INSTRUCTION = "\nUser instruction: "
 _BUNDLE_FIRST_SKILL_BLOCK = "\n\n[Loaded as part of the "
 _AUTO_LOAD_PREFIX = '[IMPORTANT: The "'
 _SKILL_DIR_NOTE_END = "then run them with the terminal tool using the absolute path."
+
+SYNTHETIC_TURN_PREFIXES = (
+    # agent/context_compressor.py:937-940 (_SYNTHETIC_USER_ROW_PREFIXES)
+    "[System:", "[CONTEXT", "[PRIOR CONTEXT", "[IMPORTANT: Background", "[Your active task list",
+    "[Planning state preserved", "[ASYNC DELEGATION", "[OUT-OF-BAND", "Cronjob Response:",
+    # further synthetic turns (see the module docstring)
+    "[IMPORTANT:", "[System note:", "[Background process ", "[Continuing toward ", "[Goal set]",
+    "[Heartbeat", "[Cron delivery:", "[Webhook delivery:",
+)
+_LEADING_SYSTEM_NOTE = re.compile(r"\A\[System(?: note)?:[^\]]*\]\n\n(?=\S)")
 
 
 def message_text(user_message: Any) -> str:
@@ -132,6 +158,13 @@ def typed_text(text: str) -> str:
     text = text.rstrip()
     for _ in range(64):  # peel prefixes, outermost first, until none is left
         before = text
+        text = _LEADING_SYSTEM_NOTE.sub("", text, count=1)  # a note before the user's new message
+        instruction = _skill_instruction(text)
+        if instruction is not None:
+            text = instruction  # a skill scaffold: keep only the user's own instruction
+            continue
+        if text.lstrip().startswith(SYNTHETIC_TURN_PREFIXES):
+            return ""  # a turn Hermes wrote, not the user
         text = _DISCORD_NOTE.sub("", text, count=1)
         if _REPLY_START.match(text):
             cut = text.rfind(_REPLY_END)
@@ -146,13 +179,12 @@ def typed_text(text: str) -> str:
         if cut != -1 and text[cut + len(_NEW_MESSAGE):cut + len(_NEW_MESSAGE) + 1] in ("\n", ""):
             text = text[cut + len(_NEW_MESSAGE) + 1:]
         text = _SENDER_LABEL.sub("", text, count=1)
-        instruction = _skill_instruction(text)
-        if instruction is not None:
-            text = instruction
         if text == before:
             break
     text = text.strip()
-    return "" if text == _EMPTY_PLACEHOLDER else text
+    if text == _EMPTY_PLACEHOLDER or text.startswith(SYNTHETIC_TURN_PREFIXES):
+        return ""
+    return text
 
 
 def message_id(session_id: str, ts: str, text: str) -> str:

@@ -54,3 +54,19 @@ def test_context_reference_block_is_removed(built):
     # The @file token is what the user typed; the attached file content is not.
     assert "--- Attached Context ---" in built["context_refs"]
     assert typed_text(built["context_refs"]) == f"{TYPED} @file:notes.md"
+
+
+SYNTHETIC = ["process_completion", "process_watch_match", "process_heartbeat", "process_async_delegation",
+             "goal_continue", "goal_gate_failed", "kanban_continue", "goal_kick", "heartbeat", "resume_auto"]
+
+
+@pytest.mark.parametrize("name", SYNTHETIC)
+def test_synthetic_turns_are_not_captured(built, name):
+    message = built["_synthetic"][name]
+    assert message.strip()
+    assert typed_text(message) == ""
+
+
+def test_resume_note_before_a_real_message_keeps_only_the_message(built):
+    assert built["resume_with_message"].startswith("[System note:")
+    assert typed_text(built["resume_with_message"]) == TYPED
