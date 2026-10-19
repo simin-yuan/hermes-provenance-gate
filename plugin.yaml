@@ -3,12 +3,13 @@ version: 0.1.0
 author: "Simin (Simon) Yuan"
 requires_hermes: ">=0.22.2"
 description: >-
-  Refuses memory and skill_manage writes that state a user decision ("the user decided ...")
-  unless the user's own words are quoted and found verbatim in what the user said.
-  Disclosure — keeps a local copy of the text of user messages (30-day default retention,
-  `hermes provenance-gate purge` command) and an evidence log under plugin-data/provenance-gate;
-  refuses memory and skill writes that state a user decision without a verifiable quote (observe
-  mode available); makes no network requests; never asks for approval.
+  Checks memory and skill_manage writes for sentences that state a user decision ("the user
+  decided ...", "用户决定 ..."); each needs a quote that appears verbatim in text the user typed in
+  this session and shares key words with the decision, or the write is refused with instructions.
+  Disclosure — keeps a local copy of the text of user messages and their sender_id (30-day default
+  retention, `hermes provenance-gate purge` command) and an evidence log under
+  plugin-data/provenance-gate; refuses memory and skill writes that state a user decision without a
+  verifiable quote (observe mode available); no network; never asks for approval.
 provides_hooks:
   - pre_llm_call
   - pre_tool_call
