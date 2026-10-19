@@ -1,13 +1,16 @@
 # provenance-gate
 
-An agent should not be able to write "the user decided" unless the user said it.
+Flags memory and skill writes that claim a user decision the user's own words don't back — and, if you turn it on, refuses them.
 
 `provenance-gate` is a plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
 - It keeps a local copy of what the user types each turn (`pre_llm_call`).
 - Before a `memory` or `skill_manage` write, it looks for sentences that say the user made a decision, such as "User decided …", "The owner approved …" or "用户决定 …" (`pre_tool_call`).
-- Each such sentence needs a quote in "…" that appears verbatim in text the user typed in this session and shares key words with the decision.
-- Otherwise the write is refused and the model is told how to fix it. Nothing is written, and no human approval is involved.
+- Each such sentence needs a quote in "…" that appears verbatim in text the user typed in this session, shares key words with the decision and does not drop a negation.
+- **By default (`observe`) nothing is refused:** a write without such a quote goes through and is recorded as `would_block`. `hermes provenance-gate report` lists them.
+- **In `block` mode** (`PROVENANCE_GATE_MODE=block`) the write is refused and the model is told how to fix it. Nothing is written, and no human approval is involved.
+
+Why observe is the default: the claim detector is a keyword tripwire. It misses wordings outside its patterns and flags some ordinary text (see [Measured accuracy](#measured-accuracy)). Recording is safe to leave on; refusing writes is a choice to make once you have seen what it flags on your own data.
 
 What is checked is narrower than "the user said it". See [What is checked](#what-is-checked) and the [threat model](#threat-model).
 
@@ -16,7 +19,17 @@ Upstream references below are to Hermes commit
 
 ## Worked example
 
-This is end-to-end test 2 (`tests/test_e2e_hermes.py`). It runs a real Hermes agent against a fake model server. The user types:
+These are end-to-end tests (`tests/test_e2e_hermes.py`): a real Hermes agent against a fake model server.
+
+**Observe mode (the default), test 7.** The user types `I decided we ship on Friday`; the model saves `User decided to ship on Friday.` with no quote. The write goes through, and `evidence.jsonl` records:
+
+```json
+{"ts": "…", "session": "dc9d87bf5db4", "tool": "memory", "target": "memory:memory", "claim": "User decided to ship on Friday.", "quote": null, "msg_id": null, "matched_in": null, "sender_id": null, "verdict": "would_block", "reason": "no_quote"}
+```
+
+`hermes provenance-gate report` counts these by reason and lists the newest ones.
+
+**Block mode, test 2.** The user types:
 
 ```
 I decided we ship on Friday
@@ -52,6 +65,12 @@ A quote of something unrelated the user typed is refused too (end-to-end test 12
 {"error": "provenance-gate: this write states a user decision (\"The user approved deleting the prod database (\"can you look at the logs for me\").\") without the user's words. The quoted words (\"can you look at the logs for me\") do not share key words with the decision. Quote the user's exact words in \"...\" if they said it, or write it as your own suggestion or as an open question. Nothing was written."}
 ```
 
+A quote that drops a negation is refused (end-to-end test 15, after the user typed "Never delete the prod database without asking me"; the message is shortened here):
+
+```json
+{"error": "provenance-gate: this write states a user decision (\"The user approved deleting the prod database (\"delete the prod database\").\") without the user's words. The quoted words (\"delete the prod database\") follow a negation in what the user typed (for example \"never …\" or \"don't …\"), so they do not back the decision. …"}
+```
+
 The third block of the same write target in one turn adds `Stop retrying this write; ask the user instead.` It is still a block (end-to-end test 3b).
 
 ## Install
@@ -83,7 +102,7 @@ These are environment variables, for example in `~/.hermes/.env`:
 
 | Variable | Values | Default |
 |---|---|---|
-| `PROVENANCE_GATE_MODE` | `block`: refuse the write. `observe`: never refuse, log `would_block` instead. | `block` |
+| `PROVENANCE_GATE_MODE` | `observe`: never refuse, log `would_block`. `block`: refuse the write. | `observe` |
 | `PROVENANCE_GATE_SEARCH` | `session`: quotes must come from this session. `profile`: if not found in this session, every retained message in the profile is searched too. | `session` |
 | `PROVENANCE_GATE_SCOPE` | `decisions`, or `decisions+preferences` to also require quotes for "prefers / likes / 喜欢 / 偏好 …" | `decisions` |
 | `PROVENANCE_GATE_RETENTION_DAYS` | Days of stored user text and evidence rows to keep | `30` |
@@ -91,12 +110,13 @@ These are environment variables, for example in `~/.hermes/.env`:
 Commands:
 
 ```bash
+hermes provenance-gate report [--days N]                # counts by verdict and reason, newest flagged claims
 hermes provenance-gate log [--limit N] [--verdict pass|blocked|would_block]
 hermes provenance-gate check "<text>" [--session ID]   # dry run, writes no rows
 hermes provenance-gate purge (--older-than DAYS | --all)
 ```
 
-`--limit` and `--older-than` must be zero or more.
+`--days`, `--limit` and `--older-than` must be zero or more.
 
 ## What is checked
 
@@ -109,23 +129,27 @@ hermes provenance-gate purge (--older-than DAYS | --all)
    Then:
    - `memory`: `content` (or its alias `new_text`) of `add` and `patch` (`tools/memory_tool.py:250-289`, `:373-446`).
    - `skill_manage`: `content` of `create` and the legacy `edit`, `new_string` or `content` of `patch`, `file_content` of `write_file` (`tools/skill_manager_tool.py:722-728`, `:862-919`).
+   - **A patch is checked by what it produces.** For a `memory` patch, the whole patched entry is checked: the entry is found and patched the way the store does it (`tools/memory_tool_store.py:146-159`). For a `skill_manage` patch, every line of the patched file that the replacement touches is checked; the skill is found with Hermes' public `skill_search_dirs` / `locate_skill`. So "The user is evaluating Postgres" patched to "The user chose Postgres", or a patch that deletes the quote from a quoted claim, is seen. If the result cannot be reproduced (no such entry or file), only the replacement text is checked, and the tool itself then fails on the missing span ([`provenance_gate/results.py`](provenance_gate/results.py)).
    - Removals add nothing.
 
    If the plugin cannot read the arguments of a `memory` or `skill_manage` call, the call is refused. Examples: an `operations` string that is not JSON, an item that is not an object, a text field that is not a string.
-2. **Sentences.** The text is normalized first: NFKC, which also folds full-width letters, with zero-width characters and soft hyphens removed. It is then split into lines and sentences, in English and Chinese. A sentence end inside a quotation does not split the sentence.
+2. **Sentences.** The text is normalized first: NFKC, which also folds full-width letters, with every Unicode Default_Ignorable_Code_Point removed (zero-width and joiner characters, soft hyphen, invisible operators U+2061–2064, U+180E, U+034F, variation selectors, tag characters …) and Markdown `**` / `__` emphasis ignored. It is then split into lines and sentences, in English and Chinese. A hard-wrapped line (indented by one to three spaces, or following a line that stops right after "the user") is joined to the previous one. A sentence end inside a quotation does not split the sentence.
 3. **Generic-actor rule.** Not every sentence about "the user" is about the person the agent works for. These are not claims:
    - lines inside a fenced code block or indented by four spaces or a tab, so a `# user confirmed …` inside code is a comment, not a heading
    - Markdown table rows, such as `| User confirmed the order | checkout.js |`
-   - key/value lines whose key holds the decision words and whose value is a scalar, such as `user confirmed: false` or `user approved = true`
+   - key/value lines whose key holds the decision words and whose value is a scalar, such as `user confirmed: false` or `user approved = true`, or a lower-case key with a one-word value (`user chose: dark`). A capitalised prose key with a word value is a claim: `User decided: Postgres.`
    - key/value lines with an identifier key, such as `on_confirm: user confirmed the modal, emit event`
    - QA and spec lines starting with a label such as `Bug #12:`, `Step 3:`, `Expected:` or `Given …`
-   - sentences where a study, scenario or example word comes before the subject: "In the usability study, the user chose …", "Each user confirmed …", 测试中, 例如
+   - sentences where a study, scenario, flow or example word comes before the subject in the same clause: "In the usability study, the user chose …", "In the checkout flow the user chose …", 测试中, 例如. A contrast starts a new clause: "Usually we wait, but the user approved …" is a claim
+   - a source reporting it: "Upstream issue #4411 says the owner approved …", "Docs say the user decided …"; and lines labelled as tickets, interview notes, policies or changelogs (`Ticket PAY-212:`, `CHANGELOG 2.3:`)
+   - field and column names: "the user approved column", "the owner decided field"; "signed off with" is not "signed off on"
+   - Chinese nouns and noun phrases: 用户确认码, 用户批准率, 用户指示灯, 用户同意书, 老板同意的报销单, 用户确认支付的回调可能重复; data-dictionary lines with `=`; scripts and records (话术, 这是…的记录)
    - Chinese rules and conditions: 用户确认收货后，订单完成; 用户同意隐私政策才能注册
    - a third party or a population: repo owner, 仓库主人, 新用户, and the plural "users"
 
    All of these are data in [`provenance_gate/patterns.py`](provenance_gate/patterns.py), with tests.
 4. **Claims.**
-   - **English:** a sentence is a decision claim when its subject is `user`, `the user`, `owner` or `the owner`, followed by: decided, chose, agreed, approved, confirmed, signed off, instructed, asked me to, told me to, wants us to, said to, gave the go-ahead, rejected, vetoed, OK'd / okayed, said yes to, greenlit. The phrases "the user's decision: …", "per the user" and "according to the user's instructions" also count.
+   - **English:** a sentence is a decision claim when its subject is `user`, `the user`, `owner` or `the owner` (optionally with a short parenthetical, "The user (Dana)", and adverbs such as already, explicitly, really, actually, definitely), followed by: decided, chose, agreed, approved, confirmed, signed off, instructed, asked me to, told me to, wants us to, said to, gave the go-ahead, rejected, vetoed, OK'd / okayed, said yes to, greenlit. The phrases "the user's decision: …", "per the user" and "according to the user's instructions" also count.
    - **Chinese:** the subject is 用户 / 用戶 / 主人 / 老板 / 老闆, optionally followed by 已经, 明确地 or 正式 and spaces, then 决定 / 決定, 同意, 批准 / 批準, 确认 / 確認, 拍板, 要求, 指示, 让我, 选择了, 否决 or 拒绝了 / 拒絕了.
    - **Not claims:**
      - negated forms ("has not decided", 未决定, 尚未同意)
@@ -139,18 +163,19 @@ hermes provenance-gate purge (--older-than DAYS | --all)
    - A quoted user message that happens to contain decision words is the user's text, not a claim.
 6. **Evidence.** A claim passes when it contains a quote in "…", “…”, '…' (two or more words), 「…」 or 『…』 that meets all of these:
    - **Verbatim.** It appears verbatim in text the user typed. Matching normalizes NFKC, whitespace, letter case, straight vs curly quotes and the quote's trailing punctuation, and nothing else. A quote may not cut a word in half, including across `-`, `_`, `.`, `/` or `'`.
-   - **This session.** It comes from this session (`PROVENANCE_GATE_SEARCH=session`, the default). The background review fork carries the parent's session id (`agent/background_review.py:1005`), so its writes are checked against what the user typed in that session.
+   - **This session.** It comes from this session (`PROVENANCE_GATE_SEARCH=session`, the default). The background review fork carries the parent's session id (`agent/background_review.py:1005`), so its writes are checked against what the user typed in that session. Context compression starts a new session id (`agent/conversation_compression.py:3287`); `pre_llm_call` reports the previous one as `parent_session_id`, the plugin records the link, and the sessions before compression count as this session.
+   - **No dropped negation.** If, in the user's message, a negation word comes within the three words (or four CJK characters) before the quoted span — never, not, no, don't, without, 不要, 别, 禁止 … — the quote does not count (`quote_negated`), unless the quote itself contains a negation. "Never delete the prod database" does not back "approved deleting the prod database".
    - **About the claim.** It shares at least two content tokens with the rest of the sentence. Latin tokens are words of three or more letters, lower-cased, minus a short stopword list. CJK tokens are character bigrams.
    - **Short quotes.** A quote shorter than 4 words (Latin) or 4 characters (CJK), such as "yes" or "好", counts only if it is the user's whole message, in this session, among their last 3 messages.
 
-   Each claim in a write needs its own quote. A write with more than 100 claims is refused.
+   Each claim in a write needs its own quote. Within one sentence, each claim owns the text from its start to the next claim, and its quote must be there: "User decided X ("…") and the user approved Y." fails for the second claim. A write with more than 100 claims is refused (block mode) or flagged.
 7. **Unattended runs.** The gate never uses Hermes' approval prompt, so it behaves the same in the CLI, the gateway, cron and unattended runs.
 8. **Errors.**
    - The verdict is decided before anything is logged. If the evidence log cannot be written, a warning is logged and the verdict stands.
    - An unreadable `said.jsonl` counts as "nothing typed", so claims are refused.
-   - An internal error while checking a `memory` or `skill_manage` call refuses the call.
+   - An internal error while checking a `memory` or `skill_manage` call refuses the call in block mode, and is logged as `would_block` (`internal_error`) in observe mode.
    - A failure in `pre_llm_call` (capture) is logged and ignored.
-9. **Speed.** The check is linear in the size of the write. A test checks 1 MiB of adversarial text in under 2 seconds (`tests/test_performance.py`).
+9. **Speed.** Claim detection is linear in the size of the write, and at most 101 claims per sentence are examined. Looking up a quote scans the captured messages in the searched scope, so a check costs about (quotes in the write) × (stored text searched). Parsed rows of `said.jsonl` are reused between checks while the file only grows. Tests: 1 MiB of adversarial text is checked in under 2 seconds; a 15 MB store searched in `profile` mode for 100 quoted claims, in under 4 seconds (`tests/test_performance.py`).
 
 ## What is captured
 
@@ -162,9 +187,11 @@ hermes provenance-gate purge (--older-than DAYS | --all)
   - `--- Attached Context ---` blocks from `@` references
   - shared-chat sender labels and channel backfill
   - skill bodies inlined by a skill command, keeping only the user's own instruction
-- **Tests.** `tests/test_hermes_strings.py` builds these blocks with Hermes' own functions and checks that they are removed.
+  - a leading `[System note: …]` / `[System: …]` before the user's new message (the gateway resume and interrupted-turn notes)
+- **Turns Hermes writes itself are not captured at all.** A turn whose text starts with one of these headers stores nothing: Hermes' own list of scaffolding rows "that carry no real user words" (`agent/context_compressor.py:937-940`: `[System:`, `[CONTEXT`, `[PRIOR CONTEXT`, `[IMPORTANT: Background`, `[Your active task list`, `[Planning state preserved`, `[ASYNC DELEGATION`, `[OUT-OF-BAND`, `Cronjob Response:`), background-process notices (`[IMPORTANT: …]`, `[Background process … heartbeat`), async delegation results, `/goal` and kanban continuation prompts (`[Continuing toward …`), the goal kick (`[Goal set]`), heartbeat prompts (`[Heartbeat — …`), other `[System note:` turns, and cron and webhook deliveries. Kinds not listed here may still be captured.
+- **Tests.** `tests/test_hermes_strings.py` builds these blocks and turns with Hermes' own functions and checks that they are removed or skipped.
 - **Empty results.** A message made only of such blocks stores nothing.
-- **Sender.** Each row stores the turn's `sender_id`.
+- **Sender and session chain.** Each row stores the turn's `sender_id`, and `parent_session_id` when the session was started by context compression.
 - **Agents that are not the user.** The curator fork (`platform="curator"`, `agent/curator.py:1119`), `delegate_task` children (`platform="subagent"`, `tools/delegate_tool.py:282`) and cron runs (`platform="cron"`, `cron/scheduler.py:2524`) fire `pre_llm_call` with text the user did not type. None of it is captured. Writes from those agents are still checked.
 
 ## Threat model
@@ -175,6 +202,8 @@ hermes provenance-gate purge (--older-than DAYS | --all)
   - The generic-actor rule exempts code blocks, table rows and key/value lines.
   - Anything that can write files under `HERMES_HOME`, for example the `terminal` or `write_file` tools, can edit or forge `said.jsonl`.
 - **Group chats.** In group or shared chats, any participant's words can serve as a quote. The evidence row names the sender (`sender_id`).
+- **Other plugins.** Another plugin's `pre_tool_call` `modify` directive can change the arguments after this plugin has checked them.
+- **Compression mid-turn.** If compression starts a new session in the middle of a turn, a write made before the user types again cannot see quotes from before compression in `session` mode (the link is recorded at the next `pre_llm_call`). Use `profile` search if that matters to you.
 
 ## What it does not do
 
@@ -189,8 +218,13 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 
 - **What is stored.** The plugin keeps the text the user typed (not images or audio) and its `sender_id` in `<HERMES_HOME>/plugin-data/provenance-gate/said.jsonl`. Evidence rows, which include the quote, the claim and the sender, go in `evidence.jsonl` in the same folder. It is profile-aware (`plugins/plugin_storage.py:27`).
 - **File permissions.** On POSIX, both files are created with mode 0600. On Windows the mode bits are ignored, and the files inherit the access rules of the folder, normally your user profile.
-- **Retention.** Rows older than `PROVENANCE_GATE_RETENTION_DAYS` (default 30) are ignored when read. They are also removed from both files, at most once an hour, when a new row is written. `hermes provenance-gate purge --older-than DAYS` or `--all` deletes rows on demand.
+- **Retention.** Rows older than `PROVENANCE_GATE_RETENTION_DAYS` (default 30) are ignored when read. They are also removed from both files, at most once an hour, when a new row is written (the file is rewritten atomically). `hermes provenance-gate purge --older-than DAYS` or `--all` deletes rows on demand. Purging leaves the plugin's empty `.lock` and `.pruned` marker files in the folder; they hold no data.
+- **Host isolation.** Under `plugins.isolation: host`, Hermes does not register plugin CLI commands, so `report`, `log`, `check` and `purge` are unavailable; delete the files in the folder by hand to purge.
 - **Nothing leaves the machine.** The plugin makes no network requests.
+
+## Measured accuracy
+
+The independent measurement is pending: the next audit writes a fresh, hand-labelled set the rules have never seen, and its precision and recall go here, with the set committed unchanged under `tests/corpus/`.
 
 ## Related
 
@@ -224,6 +258,7 @@ Corpora (`tests/test_corpora.py`, run with `-s` to print the counts):
   - generic-actor text: QA and UX notes, UI-step tables, key/value lines, code comments, and Chinese e-commerce and policy rules
 
   Each is sent as a `memory` add and as a `skill_manage` create, for 426 calls. Blocked: 0.
+- **`tests/corpus/audit_regressions.jsonl`:** 100 lines (40 claims, 60 not) built from the shapes the two independent audits reported, labelled by hand. Every label is met. Because the rules were tuned on these shapes, this set is a regression guard, not an accuracy measure; see [Measured accuracy](#measured-accuracy).
 - **`tests/corpus/claims.jsonl`:** 174 decision-claim cases with their expected outcome. They cover:
   - valid, missing, unsaid and unrelated quotes
   - quotes from another session, under each search setting

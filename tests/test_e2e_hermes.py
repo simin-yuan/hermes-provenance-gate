@@ -195,27 +195,27 @@ def test_12_unrelated_quote_is_blocked(stream, tmp_path_factory):
     assert r["memory_md"] == "" and r["evidence"][0]["reason"] == "quote_unrelated"
 
 
-def test_15_a_turn_hermes_wrote_is_not_evidence(stream, tmp_path_factory):
+def test_13_a_turn_hermes_wrote_is_not_evidence(stream, tmp_path_factory):
     r = run("synthetic_turn", stream, tmp_path_factory)
     assert [row["text"] for row in r["said"]] == [DECIDE]  # the async result was not captured
     assert r["memory_md"] == ""
     assert r["evidence"][0]["reason"] == "quote_not_found"
 
 
-def test_16_a_patch_that_builds_a_claim_is_blocked(stream, tmp_path_factory):
+def test_14_a_patch_that_builds_a_claim_is_blocked(stream, tmp_path_factory):
     r = run("patch_splice", stream, tmp_path_factory)
     assert r["memory_md"].strip() == "The user is evaluating Postgres for the main DB."
     row = r["evidence"][-1]
     assert (row["verdict"], row["reason"], row["claim"]) == ("blocked", "no_quote", "The user chose Postgres for the main DB.")
 
 
-def test_17_a_quote_that_drops_a_negation_is_blocked(stream, tmp_path_factory):
+def test_15_a_quote_that_drops_a_negation_is_blocked(stream, tmp_path_factory):
     r = run("negated_fragment", stream, tmp_path_factory)
     assert r["memory_md"] == ""
     assert r["evidence"][0]["reason"] == "quote_negated"
 
 
-def test_18_each_claim_needs_its_own_quote(stream, tmp_path_factory):
+def test_16_each_claim_needs_its_own_quote(stream, tmp_path_factory):
     r = run("two_claims_one_quote", stream, tmp_path_factory)
     assert r["memory_md"] == ""
     assert [row["reason"] for row in r["evidence"]] == ["no_quote"]
