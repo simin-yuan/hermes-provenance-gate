@@ -94,7 +94,7 @@ Then check it:
 hermes plugins doctor provenance-gate
 ```
 
-The plugin needs Hermes 0.22.2 or newer (`requires_hermes: ">=0.22.2"`). It has been tested on the v0.22.2 release, on the pinned commit above and on Hermes `main` at `493208879a3248c6a4b844981d2c31c78ae00929`. It has no Python dependencies.
+The plugin needs Hermes 0.22.2 or newer (`requires_hermes: ">=0.22.2"`). It has been tested on the v0.22.2 release, on the pinned commit above and on Hermes `main` at `9cb34e9e285dadd0c6d2463e9b094052530fc365`. It has no Python dependencies.
 
 ## Configuration
 
