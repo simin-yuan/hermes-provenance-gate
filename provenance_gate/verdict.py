@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from . import claims as claims_mod
-from . import quotes, store
+from . import patterns, quotes, store
 from .args import ArgError, added_texts
 from .claims import PROSE, Claim
 
@@ -39,10 +39,11 @@ REASON_NOT_FOUND = "quote_not_found"
 REASON_TOO_SHORT = "quote_too_short"
 REASON_UNRELATED = "quote_unrelated"
 REASON_NEGATED = "quote_negated"
+REASON_QUESTION = "quote_from_question"
 REASON_TOO_MANY = "too_many_claims"
 REASON_UNREADABLE = "unreadable_arguments"
 REASON_INTERNAL = "internal_error"
-_REASON_ORDER = (REASON_NEGATED, REASON_UNRELATED, REASON_TOO_SHORT, REASON_NOT_FOUND)
+_REASON_ORDER = (REASON_NEGATED, REASON_QUESTION, REASON_UNRELATED, REASON_TOO_SHORT, REASON_NOT_FOUND)
 
 
 def mode() -> str:
@@ -119,13 +120,16 @@ class Evidence:
         status, row = self.session.find(quote)
         if status == "found":
             return "found", row, "this-session"
-        negated = status == "negated"
+        seen = {status}
         if self.others is not None:
             other_status, other_row = self.others.find(quote)
             if other_status == "found":
                 return "found", other_row, "other-session"
-            negated = negated or other_status == "negated"
-        return ("negated", None, None) if negated else ("not_found", None, None)
+            seen.add(other_status)
+        for kind in ("negated", "question"):
+            if kind in seen:
+                return kind, None, None
+        return "not_found", None, None
 
 
 def _mask(sentence: str, spans: list[tuple[int, int, str]]) -> str:
@@ -136,7 +140,8 @@ def _mask(sentence: str, spans: list[tuple[int, int, str]]) -> str:
     return "".join(chars)
 
 
-def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evidence) -> list[ClaimCheck]:
+def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evidence,
+                   carried: frozenset[str] = frozenset()) -> list[ClaimCheck]:
     """One check per decision claim in ``sentence`` (empty when there is none).
 
     Each claim match owns the stretch of the sentence from its start to the next claim's start (the
@@ -146,7 +151,14 @@ def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evide
     if not claims_mod.find_claim_matches(sentence, claim_scope):
         return []
     spans = quotes.quote_spans(sentence)[:MAX_SPANS_PER_SENTENCE]
-    looked = [(span, *evidence.lookup(span[2])) for span in spans]
+    looked = []
+    for span in spans:
+        status, row, where = evidence.lookup(span[2])
+        if status != "found" and quotes.normalize_quote(span[2]) in carried:
+            # The quote is already in the stored entry or file this write edits: it was there before
+            # this call, so an edit that keeps it does not need it in the current session.
+            status, row, where = "found", {}, "stored-text"
+        looked.append((span, status, row, where))
     verified = [span for span, status, _row, _where in looked if status == "found"]
     matches = claims_mod.find_claim_matches(_mask(sentence, verified), claim_scope)
     if not matches:
@@ -168,6 +180,10 @@ def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evide
             inner = span[2]
             if status == "found":
                 rest = quotes.remove_spans(segment, [(span[0] - lo, span[1] - lo, inner)])
+                if (found.pattern in patterns.APPROVAL_PATTERNS and quotes.leads_with_negation(inner)
+                        and not quotes.has_negation(quotes.normalize(rest))):
+                    reasons.setdefault(REASON_NEGATED, inner)  # "approved X" backed by "don't approve X"
+                    continue
                 if quotes.is_short(inner) or quotes.related(inner, rest):
                     passed = ClaimCheck(target, claim, True, None, inner, row.get("msg_id"), where,
                                         row.get("sender_id") or "")
@@ -177,6 +193,8 @@ def check_sentence(target: str, sentence: str, claim_scope: str, evidence: Evide
                 reasons.setdefault(REASON_TOO_SHORT, inner)
             elif status == "negated":
                 reasons.setdefault(REASON_NEGATED, inner)
+            elif status == "question":
+                reasons.setdefault(REASON_QUESTION, inner)
             else:
                 reasons.setdefault(REASON_NOT_FOUND, inner)
         if passed is not None:
@@ -197,14 +215,19 @@ def evaluate(tool_name: str, args: Any, session_id: str, said: list[dict],
         return []
     evidence = Evidence(said, session_id, search)
     checks: list[ClaimCheck] = []
-    for target, text in texts:
+    for target, text, before in texts:
         text = quotes.detection_form(text)
         if not claims_mod.SUBJECT_HINT.search(text):
             continue  # no subject word anywhere: no claim is possible
+        stored = {quotes.normalize(s.text) for s in claims_mod.split_sentences(quotes.detection_form(before))} if before else set()
+        carried = frozenset(quotes.normalize_quote(q) for q in quotes.extract_quotes(quotes.detection_form(before))) \
+            if before else frozenset()
         for sentence in claims_mod.split_sentences(text):
             if sentence.context != PROSE:
                 continue
-            for check in check_sentence(target, sentence.text, claim_scope, evidence):
+            if stored and quotes.normalize(sentence.text) in stored:
+                continue  # already in the stored text, unchanged: not a new claim (results.py)
+            for check in check_sentence(target, sentence.text, claim_scope, evidence, carried):
                 if len(checks) >= MAX_CLAIMS_PER_CALL:
                     return checks + [ClaimCheck(target, check.claim, False, REASON_TOO_MANY)]
                 checks.append(check)
@@ -236,6 +259,9 @@ def block_message(failed: ClaimCheck, attempts: int, search: str = SEARCH_SESSIO
     elif failed.reason == REASON_NEGATED:
         parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") follow a negation in what the user '
                      "typed (for example \"never …\" or \"don't …\"), so they do not back the decision.")
+    elif failed.reason == REASON_QUESTION:
+        parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") come from a question the user asked, '
+                     "so they do not back the decision.")
     elif failed.reason == REASON_UNRELATED:
         parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") do not share key words with '
                      "the decision.")

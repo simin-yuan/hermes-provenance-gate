@@ -82,6 +82,7 @@ def _split_segment(segment: str) -> list[str]:
 
 
 _STARTS_BLOCK = re.compile(r"^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+")
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _WRAP_TAIL = re.compile(r"(?:\b(?:the|user|owner|has|had|already|explicitly)|用户|用戶|主人|老板|老闆)\s*$", re.IGNORECASE)
 
 
@@ -116,8 +117,8 @@ def split_sentences(text: str) -> list[Sentence]:
         if not raw.strip():
             flush()
             continue
-        if in_fence or _INDENTED.match(raw):
-            flush()
+        if in_fence or (_INDENTED.match(raw) and not _LIST_ITEM.match(raw)):
+            flush()  # an indented nested list item ("    - ...") is prose, not code
             out.append(Sentence(raw.strip(), CODE))
             continue
         line = _LINE_MARKER.sub("", raw).strip()

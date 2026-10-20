@@ -22,6 +22,12 @@ before the row is stored (strings as built at Hermes b4170e73):
   (gateway/run_inbound.py:1400-1403);
 - skill invocation bodies, keeping only the user's own instruction (agent/skill_commands.py
   markers :49-70, builders :366-418 and :816-826, gateway auto-load gateway/run_turn_prepare.py:484-503; the CLI sends them from cli.py:1342);
+- quoted-reply blocks of the WeChat and QQ adapters, ``[引用: …]`` / ``[引用媒体…]`` followed by a
+  newline (plugins/platforms/weixin/adapter.py:536-544) and ``[Quoted message]:`` followed by the
+  quoted lines and a blank line (plugins/platforms/qqbot/adapter.py:876-890). The quoted text can
+  contain anything, so everything up to the LAST ``]\n`` / blank line is removed: losing some typed
+  words is safe, keeping quoted words is not;
+- the model-switch note ``[Note: model was just switched …]`` (gateway/slash_commands_model.py:239-247);
 - leading system notes Hermes puts before the user's new message, ``[System note: …]`` /
   ``[System: …]`` followed by a blank line (gateway/run.py:1039-1079 resume note,
   gateway/run_turn_runner.py:891 interrupted-turn note).
@@ -94,6 +100,9 @@ SYNTHETIC_TURN_PREFIXES = (
     "[IMPORTANT:", "[System note:", "[Background process ", "[Continuing toward ", "[Goal set]",
     "[Heartbeat", "[Cron delivery:", "[Webhook delivery:",
 )
+_WEIXIN_QUOTE = re.compile(r"\A\[引用(?:媒体)?(?::|：|\])")
+_QQ_QUOTE = "[Quoted message]:"
+_MODEL_NOTE = re.compile(r"\A\[Note: model was just switched [^\]]*\]\s*")
 _LEADING_SYSTEM_NOTE = re.compile(r"\A\[System(?: note)?:[^\]]*\]\n\n(?=\S)")
 
 
@@ -166,6 +175,13 @@ def typed_text(text: str) -> str:
         if text.lstrip().startswith(SYNTHETIC_TURN_PREFIXES):
             return ""  # a turn Hermes wrote, not the user
         text = _DISCORD_NOTE.sub("", text, count=1)
+        text = _MODEL_NOTE.sub("", text, count=1)
+        if _WEIXIN_QUOTE.match(text):
+            cut = text.rfind("]\n")
+            text = text[cut + 2:] if cut != -1 else ""
+        if text.startswith(_QQ_QUOTE):
+            cut = text.rfind("\n\n")
+            text = text[cut + 2:] if cut != -1 else ""
         if _REPLY_START.match(text):
             cut = text.rfind(_REPLY_END)
             text = text[cut + len(_REPLY_END):] if cut != -1 else ""

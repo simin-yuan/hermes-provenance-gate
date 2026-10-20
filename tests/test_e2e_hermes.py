@@ -219,3 +219,22 @@ def test_16_each_claim_needs_its_own_quote(stream, tmp_path_factory):
     r = run("two_claims_one_quote", stream, tmp_path_factory)
     assert r["memory_md"] == ""
     assert [row["reason"] for row in r["evidence"]] == ["no_quote"]
+
+
+def test_17_a_claim_built_inside_one_batch_is_blocked(stream, tmp_path_factory):
+    r = run("batch_splice", stream, tmp_path_factory)
+    assert r["memory_md"] == ""
+    row = r["evidence"][-1]
+    assert (row["verdict"], row["reason"], row["claim"]) == ("blocked", "no_quote", "The user chose Postgres for the main DB.")
+
+
+def test_18_a_nested_list_item_is_checked(stream, tmp_path_factory):
+    r = run("nested_bullet", stream, tmp_path_factory)
+    assert r["memory_md"] == ""
+    assert r["evidence"][0]["reason"] == "no_quote"
+
+
+def test_19_a_question_is_not_an_approval(stream, tmp_path_factory):
+    r = run("question_as_quote", stream, tmp_path_factory)
+    assert r["memory_md"] == ""
+    assert r["evidence"][0]["reason"] == "quote_from_question"

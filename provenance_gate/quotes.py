@@ -201,7 +201,7 @@ def occurs_in(quote_norm: str, message_norm: str) -> bool:
 
 
 _NEGATION_WORDS = frozenset(patterns.EN_NEGATIONS)
-_NEGATION_LOOKBACK = 3
+_NEGATION_LOOKBACK = 12
 
 
 def has_negation(text_norm: str) -> bool:
@@ -211,15 +211,38 @@ def has_negation(text_norm: str) -> bool:
                for w in re.findall(r"[a-z]+(?:['’][a-z]+)?", text_norm))
 
 
+_SENTENCE_END = re.compile(r"[.!?;。！？；\n]")
+
+
 def negated_at(message_norm: str, start: int) -> bool:
-    """A negation word among the 3 words (Latin) or 4 characters (CJK) right before ``start``:
-    "Never delete the prod database" does not back a quote of "delete the prod database"."""
-    before = message_norm[max(0, start - 80):start]
-    cjk_tail = before.rstrip()[-4:]
+    """A negation word earlier in the same sentence of the user's message, before ``start`` (up to
+    12 words or 6 CJK characters back): "Never delete the prod database" and "Do not, under any
+    circumstances, delete the prod database" do not back a quote of "delete the prod database"."""
+    window = message_norm[max(0, start - 200):start]
+    ends = list(_SENTENCE_END.finditer(window))
+    before = window[ends[-1].end():] if ends else window
+    cjk_tail = before.rstrip()[-6:]
     if any(ch in patterns.ZH_NEGATION_CHARS for ch in cjk_tail):
         return True
     words = re.findall(r"[a-z]+(?:['’][a-z]+)?", before)[-_NEGATION_LOOKBACK:]
     return any(w in _NEGATION_WORDS or w.endswith(("n't", "n’t")) for w in words)
+
+
+def leads_with_negation(quote: str) -> bool:
+    """The quote's first few words (or characters, for CJK) hold a negation: "don't approve …"."""
+    norm = normalize(quote)
+    words = re.findall(r"[a-z]+(?:['’][a-z]+)?", norm)[:patterns.QUOTE_LEADING_WORDS]
+    if any(w in _NEGATION_WORDS or w.endswith(("n't", "n’t")) for w in words):
+        return True
+    return any(ch in patterns.ZH_NEGATION_CHARS for ch in norm[:4])
+
+
+def in_question(message_norm: str, end: int) -> bool:
+    """The sentence holding the quoted span ends with a question mark: "Should we delete the prod
+    database?" asks; it does not back "approved deleting the prod database"."""
+    match = _SENTENCE_END.search(message_norm, end)
+    tail = message_norm[end:match.start() + 1] if match else message_norm[end:]
+    return tail.rstrip().endswith(("?", "？"))
 
 
 def equals_whole(quote_norm: str, message_norm_quote: str) -> bool:
@@ -236,10 +259,11 @@ class Messages:
 
     def find(self, quote: str, whole_only: bool = False) -> tuple[str, dict | None]:
         """``("found", row)``, ``("inside", row)`` (a short quote inside a longer message),
-        ``("negated", row)`` (every occurrence follows a negation word) or ``("not_found", None)``.
+        ``("negated", row)`` (every occurrence follows a negation word), ``("question", row)`` (every
+        occurrence is inside a question) or ``("not_found", None)``.
         ``whole_only`` applies the short-quote rule."""
         q = normalize_quote(quote)
-        inside = negated = None
+        inside = negated = question = None
         for i, row in enumerate(self.rows):
             if whole_only:
                 if equals_whole(q, self.norm_whole[i]):
@@ -247,7 +271,9 @@ class Messages:
                 if inside is None and occurs_in(q, self.norm[i]):
                     inside = row
                 continue
-            starts = occurrences(q, self.norm[i])
+            starts = [st for st in occurrences(q, self.norm[i]) if not in_question(self.norm[i], st + len(q))]
+            if not starts and occurs_in(q, self.norm[i]) and question is None:
+                question = row
             if starts and has_negation(q):
                 return "found", row  # the quote carries its own negation; nothing was dropped
             if any(not negated_at(self.norm[i], start) for start in starts):
@@ -256,7 +282,9 @@ class Messages:
                 negated = row
         if inside is not None:
             return "inside", inside
-        return ("negated", negated) if negated is not None else ("not_found", None)
+        if negated is not None:
+            return "negated", negated
+        return ("question", question) if question is not None else ("not_found", None)
 
 
 # --- relatedness ---------------------------------------------------------------------------

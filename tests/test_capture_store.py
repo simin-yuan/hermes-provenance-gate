@@ -347,3 +347,16 @@ def test_row_cache_follows_appends_and_rewrites(tmp_path):
     rows = store.read_rows(path)
     rows.append({"n": 99})  # callers get their own list
     assert [r["n"] for r in store.read_rows(path)] == [3]
+
+
+@pytest.mark.parametrize("message,typed", [
+    ("[引用: 我建议删除旧的生产数据库来节省成本，您同意吗]\n好", "好"),
+    ("[引用: 标题 | 第一行]\n第二行]\n好的", "好的"),
+    ("[引用媒体: photo.png]\n看这个", "看这个"),
+    ("[引用媒体]\n看这个", "看这个"),
+    ("[Quoted message]:\nI suggest we delete the prod database to save money\n\nok", "ok"),
+    ("[Quoted message]: (image)\n\nlooks good", "looks good"),
+    ("[Note: model was just switched from a to b via x. Adjust your self-identification accordingly.]\n\nhi", "hi"),
+])
+def test_quoted_reply_blocks_and_model_note_are_removed(message, typed):
+    assert capture.typed_text(message) == typed

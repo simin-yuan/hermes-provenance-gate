@@ -129,13 +129,14 @@ hermes provenance-gate purge (--older-than DAYS | --all)
    Then:
    - `memory`: `content` (or its alias `new_text`) of `add` and `patch` (`tools/memory_tool.py:250-289`, `:373-446`).
    - `skill_manage`: `content` of `create` and the legacy `edit`, `new_string` or `content` of `patch`, `file_content` of `write_file` (`tools/skill_manager_tool.py:722-728`, `:862-919`).
-   - **A patch is checked by what it produces.** For a `memory` patch, the whole patched entry is checked: the entry is found and patched the way the store does it (`tools/memory_tool_store.py:146-159`). For a `skill_manage` patch, every line of the patched file that the replacement touches is checked; the skill is found with Hermes' public `skill_search_dirs` / `locate_skill`. So "The user is evaluating Postgres" patched to "The user chose Postgres", or a patch that deletes the quote from a quoted claim, is seen. If the result cannot be reproduced (no such entry or file), only the replacement text is checked, and the tool itself then fails on the missing span ([`provenance_gate/results.py`](provenance_gate/results.py)).
+   - **A write is checked by what it produces.** The operations of a call are replayed in order over the current files, so an add followed by a patch in the same call is seen. For a `memory` patch, the whole patched entry is checked: the entry is found and patched the way the store does it (`tools/memory_tool_store.py:146-159`). For a `skill_manage` patch, every line of the patched file that the replacement touches is checked; the skill is found with Hermes' public `skill_search_dirs` / `locate_skill`. Hermes applies skill patches with fuzzy matching (`tools/fuzzy_match.py`); when the exact span is absent the plugin looks it up again with whitespace collapsed and Unicode and quote marks normalized. So "The user is evaluating Postgres" patched to "The user chose Postgres", or a patch that deletes the quote from a quoted claim, is seen. Block-anchor fuzzy matches are not reproduced, and when a span cannot be found at all only the replacement text is checked ([`provenance_gate/results.py`](provenance_gate/results.py)).
+   - **Unchanged stored text is not re-checked.** A sentence that is already in the stored entry or file, unchanged, is not checked again, and a quote that is already in the stored text being edited counts as evidence (still subject to the "about the claim" rule). Fixing a typo in an entry that carries an earlier quoted decision, or merging it with another entry, does not need the old quote to be in the current session (`matched_in: "stored-text"`).
    - Removals add nothing.
 
-   If the plugin cannot read the arguments of a `memory` or `skill_manage` call, the call is refused. Examples: an `operations` string that is not JSON, an item that is not an object, a text field that is not a string.
+   If the plugin cannot read the arguments of a `memory` or `skill_manage` call, the call is refused in block mode and logged as `would_block` (`unreadable_arguments`) in observe mode. Examples: an `operations` string that is not JSON, an item that is not an object, a text field that is not a string.
 2. **Sentences.** The text is normalized first: NFKC, which also folds full-width letters, with every Unicode Default_Ignorable_Code_Point removed (zero-width and joiner characters, soft hyphen, invisible operators U+2061–2064, U+180E, U+034F, variation selectors, tag characters …) and Markdown `**` / `__` emphasis ignored. It is then split into lines and sentences, in English and Chinese. A hard-wrapped line (indented by one to three spaces, or following a line that stops right after "the user") is joined to the previous one. A sentence end inside a quotation does not split the sentence.
 3. **Generic-actor rule.** Not every sentence about "the user" is about the person the agent works for. These are not claims:
-   - lines inside a fenced code block or indented by four spaces or a tab, so a `# user confirmed …` inside code is a comment, not a heading
+   - lines inside a fenced code block or indented by four spaces or a tab, so a `# user confirmed …` inside code is a comment, not a heading. An indented line that starts with a list marker (`    - User decided …`, a nested list item) is prose and is checked
    - Markdown table rows, such as `| User confirmed the order | checkout.js |`
    - key/value lines whose key holds the decision words and whose value is a scalar, such as `user confirmed: false` or `user approved = true`, or a lower-case key with a one-word value (`user chose: dark`). A capitalised prose key with a word value is a claim: `User decided: Postgres.`
    - key/value lines with an identifier key, such as `on_confirm: user confirmed the modal, emit event`
@@ -164,15 +165,16 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 6. **Evidence.** A claim passes when it contains a quote in "…", “…”, '…' (two or more words), 「…」 or 『…』 that meets all of these:
    - **Verbatim.** It appears verbatim in text the user typed. Matching normalizes NFKC, whitespace, letter case, straight vs curly quotes and the quote's trailing punctuation, and nothing else. A quote may not cut a word in half, including across `-`, `_`, `.`, `/` or `'`.
    - **This session.** It comes from this session (`PROVENANCE_GATE_SEARCH=session`, the default). The background review fork carries the parent's session id (`agent/background_review.py:1005`), so its writes are checked against what the user typed in that session. Context compression starts a new session id (`agent/conversation_compression.py:3287`); `pre_llm_call` reports the previous one as `parent_session_id`, the plugin records the link, and the sessions before compression count as this session.
-   - **No dropped negation.** If, in the user's message, a negation word comes within the three words (or four CJK characters) before the quoted span — never, not, no, don't, without, 不要, 别, 禁止 … — the quote does not count (`quote_negated`), unless the quote itself contains a negation. "Never delete the prod database" does not back "approved deleting the prod database".
+   - **No dropped negation.** If, in the user's message, a negation word comes earlier in the same sentence as the quoted span (up to twelve words, or six CJK characters, back) — never, not, no, don't, without, 不要, 别, 禁止 … — the quote does not count (`quote_negated`), unless the quote itself contains a negation. "Never delete the prod database" and "Do not, under any circumstances, delete the prod database" do not back "approved deleting the prod database". A quote that starts with a negation ("don't approve the refund") does not back an approval-type claim (approved, agreed, confirmed, decided, chose, 同意, 批准 …) that is not itself negated; rejections and instructions are left alone, because their quotes are naturally negative.
+   - **Not a question.** A quote from a sentence the user ended with a question mark does not count (`quote_from_question`): "Should we delete the prod database?" asks; it does not approve.
    - **About the claim.** It shares at least two content tokens with the rest of the sentence. Latin tokens are words of three or more letters, lower-cased, minus a short stopword list. CJK tokens are character bigrams.
    - **Short quotes.** A quote shorter than 4 words (Latin) or 4 characters (CJK), such as "yes" or "好", counts only if it is the user's whole message, in this session, among their last 3 messages.
 
-   Each claim in a write needs its own quote. Within one sentence, each claim owns the text from its start to the next claim, and its quote must be there: "User decided X ("…") and the user approved Y." fails for the second claim. A write with more than 100 claims is refused (block mode) or flagged.
+   The quote must be in the same sentence as its claim (`;` ends a sentence). Each claim in a write needs its own quote. Within one sentence, each claim owns the text from its start to the next claim, and its quote must be there: "User decided X ("…") and the user approved Y." fails for the second claim. A write with more than 100 claims is refused (block mode) or flagged.
 7. **Unattended runs.** The gate never uses Hermes' approval prompt, so it behaves the same in the CLI, the gateway, cron and unattended runs.
 8. **Errors.**
    - The verdict is decided before anything is logged. If the evidence log cannot be written, a warning is logged and the verdict stands.
-   - An unreadable `said.jsonl` counts as "nothing typed", so claims are refused.
+   - An unreadable `said.jsonl` counts as "nothing typed", so claims fail (refused in block mode, `would_block` in observe mode).
    - An internal error while checking a `memory` or `skill_manage` call refuses the call in block mode, and is logged as `would_block` (`internal_error`) in observe mode.
    - A failure in `pre_llm_call` (capture) is logged and ignored.
 9. **Speed.** Claim detection is linear in the size of the write, and at most 101 claims per sentence are examined. Looking up a quote scans the captured messages in the searched scope, so a check costs about (quotes in the write) × (stored text searched). Parsed rows of `said.jsonl` are reused between checks while the file only grows. Tests: 1 MiB of adversarial text is checked in under 2 seconds; a 15 MB store searched in `profile` mode for 100 quoted claims, in under 4 seconds (`tests/test_performance.py`).
@@ -188,6 +190,8 @@ hermes provenance-gate purge (--older-than DAYS | --all)
   - shared-chat sender labels and channel backfill
   - skill bodies inlined by a skill command, keeping only the user's own instruction
   - a leading `[System note: …]` / `[System: …]` before the user's new message (the gateway resume and interrupted-turn notes)
+  - quoted-reply blocks: WeChat `[引用: …]` / `[引用媒体…]` (`plugins/platforms/weixin/adapter.py:536-544`) and QQ `[Quoted message]:` (`plugins/platforms/qqbot/adapter.py:876-890`). The quoted text can contain anything, so everything up to the last block boundary is removed: losing some typed words is safe, keeping quoted words is not
+  - the model-switch note `[Note: model was just switched …]` (`gateway/slash_commands_model.py:239-247`)
 - **Turns Hermes writes itself are not captured at all.** A turn whose text starts with one of these headers stores nothing: Hermes' own list of scaffolding rows "that carry no real user words" (`agent/context_compressor.py:937-940`: `[System:`, `[CONTEXT`, `[PRIOR CONTEXT`, `[IMPORTANT: Background`, `[Your active task list`, `[Planning state preserved`, `[ASYNC DELEGATION`, `[OUT-OF-BAND`, `Cronjob Response:`), background-process notices (`[IMPORTANT: …]`, `[Background process … heartbeat`), async delegation results, `/goal` and kanban continuation prompts (`[Continuing toward …`), the goal kick (`[Goal set]`), heartbeat prompts (`[Heartbeat — …`), other `[System note:` turns, and cron and webhook deliveries. Kinds not listed here may still be captured.
 - **Tests.** `tests/test_hermes_strings.py` builds these blocks and turns with Hermes' own functions and checks that they are removed or skipped.
 - **Empty results.** A message made only of such blocks stores nothing.
@@ -203,6 +207,7 @@ hermes provenance-gate purge (--older-than DAYS | --all)
   - Anything that can write files under `HERMES_HOME`, for example the `terminal` or `write_file` tools, can edit or forge `said.jsonl`.
 - **Group chats.** In group or shared chats, any participant's words can serve as a quote. The evidence row names the sender (`sender_id`).
 - **Other plugins.** Another plugin's `pre_tool_call` `modify` directive can change the arguments after this plugin has checked them.
+- **Edge cases.** An empty `session_id` (Hermes always sends one) makes every quote fail in `session` mode. Only the first 32 quoted spans of a sentence are looked up.
 - **Compression mid-turn.** If compression starts a new session in the middle of a turn, a write made before the user types again cannot see quotes from before compression in `session` mode (the link is recorded at the next `pre_llm_call`). Use `profile` search if that matters to you.
 
 ## What it does not do
@@ -224,7 +229,18 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 
 ## Measured accuracy
 
-The independent measurement is pending: the next audit writes a fresh, hand-labelled set the rules have never seen, and its precision and recall go here, with the set committed unchanged under `tests/corpus/`.
+Claim detection was measured on `tests/corpus/blind.jsonl`: 133 realistic memory and skill lines in English and Chinese (49 claims, 84 not), written and labelled by an independent auditor **before** reading any of the plugin's code, patterns or corpora. Before publication five lines were reworded to remove a personal name and details of the author's own setup; their labels are unchanged, and the numbers below, measured after the change, are identical to the original measurement. Nothing else in the file has been edited (its SHA-256 is pinned in `tests/test_corpora.py`). The rules were not tuned on it.
+
+| | Count |
+|---|---|
+| Claims flagged (true positives) | 34 |
+| Claims missed (false negatives) | 15 |
+| Non-claims flagged (false positives) | 0 |
+| Non-claims passed (true negatives) | 84 |
+| **Precision** | **1.000** (34 / 34) |
+| **Recall** | **0.694** (34 / 49) |
+
+No ordinary line was flagged, including decisions by other people ("PM decided …", "Board approved …", 产品经理决定 …). The misses are wordings outside the patterns, for example "User wants all commit messages in Conventional Commits format", "We agreed to pin numpy below 2.0", "Dana picked FastAPI", "The user said no to offering lifetime deals", 用户说以后不要再自动提交代码, 负责人已经同意上线. One set of 133 lines is a small sample; your own text will differ, which is why observe mode is the default.
 
 ## Related
 
@@ -258,6 +274,7 @@ Corpora (`tests/test_corpora.py`, run with `-s` to print the counts):
   - generic-actor text: QA and UX notes, UI-step tables, key/value lines, code comments, and Chinese e-commerce and policy rules
 
   Each is sent as a `memory` add and as a `skill_manage` create, for 426 calls. Blocked: 0.
+- **`tests/corpus/blind.jsonl`:** the independent blind set described in [Measured accuracy](#measured-accuracy).
 - **`tests/corpus/audit_regressions.jsonl`:** 100 lines (40 claims, 60 not) built from the shapes the two independent audits reported, labelled by hand. Every label is met. Because the rules were tuned on these shapes, this set is a regression guard, not an accuracy measure; see [Measured accuracy](#measured-accuracy).
 - **`tests/corpus/claims.jsonl`:** 174 decision-claim cases with their expected outcome. They cover:
   - valid, missing, unsaid and unrelated quotes

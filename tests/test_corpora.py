@@ -136,3 +136,26 @@ def test_audit_regression(row):
 
 def test_audit_regressions_summary():
     assert len(REGRESSIONS) == 100 and sum(r["claim"] for r in REGRESSIONS) == 40
+
+
+BLIND = load("blind.jsonl")
+BLIND_SHA256 = "2093317c9b20c55791f907f18fdaadd7904fe61fbbaac8871db59eaab7654274"
+
+
+def test_blind_set_is_unchanged():
+    """Written and labelled by an independent auditor before reading the code. Five lines were
+    reworded before publication to remove names and details of the author's own setup (labels
+    unchanged); nothing else has been edited."""
+    import hashlib
+    data = (CORPUS / "blind.jsonl").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == BLIND_SHA256
+
+
+def test_blind_set_accuracy():
+    """The numbers published in the README (Measured accuracy). Update both together."""
+    from provenance_gate.claims import find_claims
+    tp = sum(1 for r in BLIND if r["claim"] and find_claims(r["text"]))
+    fp = sum(1 for r in BLIND if not r["claim"] and find_claims(r["text"]))
+    claims = sum(1 for r in BLIND if r["claim"])
+    assert (len(BLIND), claims) == (133, 49)
+    assert fp == 0 and tp >= 34

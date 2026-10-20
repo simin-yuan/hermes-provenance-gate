@@ -96,6 +96,13 @@ SCENARIOS = {
         'The user approved deleting the prod database ("delete the prod database").'))]}),
     "two_claims_one_quote": ([DECIDE], {"": [calls(mem(
         f'User decided to ship on Friday ("{DECIDE}") and the user approved deleting the prod database.'))]}),
+    "batch_splice": (["Should we use Postgres for the main DB? Not sure yet."], {"": [calls({"name": "memory", "arguments": {
+        "target": "memory", "operations": [
+            {"action": "add", "content": "The user is evaluating Postgres for the main DB."},
+            {"action": "patch", "old_text": "is evaluating", "content": "chose"}]}})]}),
+    "nested_bullet": ([DECIDE], {"": [calls(mem("Release notes\n- Plans\n    - User decided to drop Python 3.9 support."))]}),
+    "question_as_quote": (["Should we delete the prod database to save money?"], {"": [calls(mem(
+        'The user approved deleting the prod database ("delete the prod database to save money").'))]}),
     "subagent": (["please write the release note"], {
         "": [{"content": "Delegating."}],
         "Write a release note": [

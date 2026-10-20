@@ -289,3 +289,10 @@ MIN_SHARED_TOKENS = 2
 
 EN_NEGATIONS = ("never", "not", "no", "without", "dont", "cannot", "nor", "neither", "stop", "avoid")
 ZH_NEGATION_CHARS = frozenset("不别別勿没沒未禁绝絕莫甭")
+
+# A quote that starts with a negation ("don't approve the refund") cannot back an approval-type
+# claim that is not itself negated. Rejections, vetoes and instructions are left alone: their quotes
+# are naturally negative ("I don't want the popup" backs "the user rejected the popup").
+APPROVAL_PATTERNS = frozenset({"approved", "agreed", "OK'd", "said yes to", "greenlit", "gave the go-ahead",
+                               "signed off", "confirmed", "同意", "批准", "确认", "decided", "决定", "chose", "选择了"})
+QUOTE_LEADING_WORDS = 3
