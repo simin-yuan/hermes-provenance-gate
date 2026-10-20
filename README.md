@@ -242,6 +242,19 @@ Claim detection was measured on `tests/corpus/blind.jsonl`: 133 realistic memory
 
 No ordinary line was flagged, including decisions by other people ("PM decided …", "Board approved …", 产品经理决定 …). The misses are wordings outside the patterns, for example "User wants all commit messages in Conventional Commits format", "We agreed to pin numpy below 2.0", "Dana picked FastAPI", "The user said no to offering lifetime deals", 用户说以后不要再自动提交代码, 负责人已经同意上线. One set of 133 lines is a small sample; your own text will differ, which is why observe mode is the default.
 
+## Where this comes from
+
+The check here is narrow, and it comes from a measurement rather than from intuition. In *History Is Not
+Memory* (Yuan, NeurIPS 2026 SocialAgent workshop, DOI
+[10.5281/zenodo.23170703](https://doi.org/10.5281/zenodo.23170703)), an agent's accumulated state was
+replaced with equivalent copies across 42 sessions. One copy given the weights but not the memory acted
+on preferences it could not report; another given a different user's memory described that user's
+preferences as its own. Its account of itself followed the memory file.
+
+So the record decides behaviour — and in an ordinary write path nothing checks the record against what
+the person actually said. This plugin is that check, at the moment the line is written, rather than in an
+audit that reads it afterwards.
+
 ## Related
 
 - **memory-shield** controls who may change an agent's memory.
