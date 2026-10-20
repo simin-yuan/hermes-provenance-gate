@@ -1,4 +1,6 @@
-"""Checking is linear: 1 MiB of adversarial text is checked well within the time budget."""
+"""Checking stays linear: these budgets catch a quadratic blow-up (minutes), not small speed
+differences between machines. Shared CI runners, Windows ones especially, are several times slower
+than a developer machine, so the budgets are generous; the README reports locally measured times."""
 
 from __future__ import annotations
 
@@ -9,7 +11,7 @@ import pytest
 from provenance_gate import verdict
 
 MIB = 1024 * 1024
-BUDGET_SECONDS = 2.0
+BUDGET_SECONDS = 8.0
 
 
 def _fit(unit: str) -> str:

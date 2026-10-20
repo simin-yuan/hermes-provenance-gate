@@ -177,7 +177,7 @@ hermes provenance-gate purge (--older-than DAYS | --all)
    - An unreadable `said.jsonl` counts as "nothing typed", so claims fail (refused in block mode, `would_block` in observe mode).
    - An internal error while checking a `memory` or `skill_manage` call refuses the call in block mode, and is logged as `would_block` (`internal_error`) in observe mode.
    - A failure in `pre_llm_call` (capture) is logged and ignored.
-9. **Speed.** Claim detection is linear in the size of the write, and at most 101 claims per sentence are examined. Looking up a quote scans the captured messages in the searched scope, so a check costs about (quotes in the write) × (stored text searched). Parsed rows of `said.jsonl` are reused between checks while the file only grows. Tests: 1 MiB of adversarial text is checked in under 2 seconds; a 15 MB store searched in `profile` mode for 100 quoted claims, in under 4 seconds (`tests/test_performance.py`).
+9. **Speed.** Claim detection is linear in the size of the write, and at most 101 claims per sentence are examined. Looking up a quote scans the captured messages in the searched scope, so a check costs about (quotes in the write) × (stored text searched). Parsed rows of `said.jsonl` are reused between checks while the file only grows. Measured on a Linux development machine: 1 MiB of adversarial text is checked in about 0.6 seconds, and 100 quoted claims against a 15 MB store in `profile` mode in about 2 seconds. `tests/test_performance.py` runs the same inputs with budgets of 8 and 16 seconds, generous enough for slow shared CI runners and far below what a quadratic blow-up would take.
 
 ## What is captured
 
