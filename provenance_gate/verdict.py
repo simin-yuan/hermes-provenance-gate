@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from . import claims as claims_mod
+from . import attribution, claims as claims_mod
 from . import patterns, quotes, store
 from .args import ArgError, added_texts
 from .claims import PROSE, Claim
@@ -282,6 +282,7 @@ def evidence_row(check: ClaimCheck, tool_name: str, session_id: str, verdict: st
     row = {"ts": store.format_ts(now), "session": session_hash(session_id), "tool": tool_name,
            "target": check.target, "claim": check.claim.sentence, "quote": check.quote,
            "msg_id": check.msg_id, "matched_in": check.matched_in, "sender_id": check.sender_id,
+           "role": attribution.role_of(check.quote), "condition": attribution.condition_of(check.quote),
            "verdict": verdict}
     if check.reason:
         row["reason"] = check.reason

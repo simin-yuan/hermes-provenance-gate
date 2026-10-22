@@ -24,7 +24,7 @@ These are end-to-end tests (`tests/test_e2e_hermes.py`): a real Hermes agent aga
 **Observe mode (the default), test 7.** The user types `I decided we ship on Friday`; the model saves `User decided to ship on Friday.` with no quote. The write goes through, and `evidence.jsonl` records:
 
 ```json
-{"ts": "…", "session": "dc9d87bf5db4", "tool": "memory", "target": "memory:memory", "claim": "User decided to ship on Friday.", "quote": null, "msg_id": null, "matched_in": null, "sender_id": null, "verdict": "would_block", "reason": "no_quote"}
+{"ts": "…", "session": "dc9d87bf5db4", "tool": "memory", "target": "memory:memory", "claim": "User decided to ship on Friday.", "quote": null, "msg_id": null, "matched_in": null, "sender_id": null, "role": "unknown", "condition": "unknown", "verdict": "would_block", "reason": "no_quote"}
 ```
 
 `hermes provenance-gate report` counts these by reason and lists the newest ones.
@@ -56,7 +56,7 @@ The corrected write quotes the user (end-to-end test 1) and passes:
 The quote and the message it matched are recorded in `evidence.jsonl`. `sender_id` is empty here because the test agent has no platform user:
 
 ```json
-{"ts": "…", "session": "fc8fab46bd69", "tool": "memory", "target": "memory:memory", "claim": "User decided to ship on Friday (\"I decided we ship on Friday\")", "quote": "I decided we ship on Friday", "msg_id": "88e4b5036ce39ce0", "matched_in": "this-session", "sender_id": "", "verdict": "pass"}
+{"ts": "…", "session": "fc8fab46bd69", "tool": "memory", "target": "memory:memory", "claim": "User decided to ship on Friday (\"I decided we ship on Friday\")", "quote": "I decided we ship on Friday", "msg_id": "88e4b5036ce39ce0", "matched_in": "this-session", "sender_id": "", "role": "self", "condition": "none", "verdict": "pass"}
 ```
 
 A quote of something unrelated the user typed is refused too (end-to-end test 12, after the user typed "can you look at the logs for me"):
@@ -196,6 +196,7 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 - **Tests.** `tests/test_hermes_strings.py` builds these blocks and turns with Hermes' own functions and checks that they are removed or skipped.
 - **Empty results.** A message made only of such blocks stores nothing.
 - **Sender and session chain.** Each row stores the turn's `sender_id`, and `parent_session_id` when the session was started by context compression.
+- **Role and condition (recorded, not judged).** Each row also stores two fields read from the quote itself: `role` (`self` / `relayed` / `unknown`) and `condition` (`none` / `unresolved` / `unknown`). Both describe what the quote *was*, never what it meant for the verdict — `"Alice decided we're using Postgres"` verifies as a quote, and the row records that it was relayed so a later version does not have to reconstruct the fact from text that no longer exists. `unresolved` means a condition marker is present (`only if`, `unless`, `as long as`); it does **not** mean the condition is unmet, because nothing here can see whether it was later satisfied. Ambiguous cases stay `unknown` rather than being forced to a side: `"Alice suggested X and I agree"` carries both a report and the user's own agreement, and a wrong `relayed` would suppress the user's decision. Neither field changes a verdict today. `tests/corpus/attribution.jsonl` holds the adversarial cases this is for.
 - **Agents that are not the user.** The curator fork (`platform="curator"`, `agent/curator.py:1119`), `delegate_task` children (`platform="subagent"`, `tools/delegate_tool.py:282`) and cron runs (`platform="cron"`, `cron/scheduler.py:2524`) fire `pre_llm_call` with text the user did not type. None of it is captured. Writes from those agents are still checked.
 
 ## Threat model
