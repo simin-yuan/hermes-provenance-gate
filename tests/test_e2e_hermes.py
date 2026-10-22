@@ -12,8 +12,11 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -32,14 +35,68 @@ pytestmark = pytest.mark.e2e
 _cache: dict[tuple[str, bool], dict] = {}
 
 
+def _require_free_space(path: Path, need_gb: float = 3.0) -> None:
+    """Fail fast instead of filling the drive.
+
+    Every e2e scenario installs the plugin into its own throwaway HERMES_HOME, so a full
+    suite writes a few hundred MB to a few GB depending on what the package manager already
+    cached. On 2026-10-22 a run on a drive with ~0 free filled it and broke unrelated
+    writes in the host system; a clear failure up front is cheaper than that.
+    """
+    free = shutil.disk_usage(path).free / 2**30
+    assert free >= need_gb, (
+        f"only {free:.1f} GB free on the drive holding the temp dir; an e2e run needs "
+        f">= {need_gb:.0f} GB. Free space first (an interrupted run may have left pg-e2e-* dirs)."
+    )
+
+
+def _remove_tree(path: Path) -> None:
+    """Delete a temp HERMES_HOME, surviving Windows handle latency.
+
+    ``shutil.rmtree`` gives up on the first locked file, and a plugin install can still be
+    finishing in a grandchild process while the parent starts deleting -- that is how a
+    tree survived after the worker had already exited. Retry briefly, clearing read-only
+    bits between attempts.
+    """
+    def _onerror(func, target, _exc):
+        try:
+            os.chmod(target, 0o700)
+            func(target)
+        except OSError:
+            pass
+
+    for delay in (0, 0.5, 1.5):
+        if delay:
+            time.sleep(delay)
+        if not path.exists():
+            return
+        if os.name == "nt":
+            # shutil.rmtree reports success on this tree while leaving it behind, so use the
+            # OS tool; ``rd /s /q`` also clears the read-only bit that blocks rmtree.
+            subprocess.run(["cmd", "/c", "rd", "/s", "/q", str(path)], capture_output=True)
+        else:
+            shutil.rmtree(path, onerror=_onerror)
+        if not path.exists():
+            return
+
+
 def run(scenario: str, stream: bool, tmp_path_factory) -> dict:
     key = (scenario, stream)
     if key not in _cache:
+        _require_free_space(tmp_path_factory.getbasetemp())
         work = tmp_path_factory.mktemp(f"{scenario}-{'stream' if stream else 'plain'}")
         spec, out = work / "spec.json", work / "result.json"
-        spec.write_text(json.dumps({"scenario": scenario, "stream": stream}), encoding="utf-8")
-        proc = subprocess.run([sys.executable, str(WORKER), str(spec), str(out)], capture_output=True,
-                              text=True, encoding="utf-8", errors="replace", timeout=600)
+        # The worker's HERMES_HOME is created here rather than in the child so this process
+        # can delete it after the child exits: a running interpreter keeps handles inside its
+        # own home, so an in-child rmtree leaves the tree behind.
+        home = Path(tempfile.mkdtemp(prefix="pg-e2e-"))
+        spec.write_text(json.dumps({"scenario": scenario, "stream": stream, "home": str(home)}),
+                        encoding="utf-8")
+        try:
+            proc = subprocess.run([sys.executable, str(WORKER), str(spec), str(out)], capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace", timeout=600)
+        finally:
+            _remove_tree(home)
         assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
         _cache[key] = json.loads(out.read_text(encoding="utf-8"))
         assert _cache[key]["stream_flags"] == [stream]  # the requests really used this mode

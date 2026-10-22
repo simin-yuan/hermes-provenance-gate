@@ -154,11 +154,7 @@ def read_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def main() -> None:
-    spec = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    out_path = Path(sys.argv[2])
-    scenario = spec["scenario"]
-    home = Path(tempfile.mkdtemp(prefix="pg-e2e-"))
+def _run(spec: dict, out_path: Path, scenario: str, home: Path) -> None:
     os.environ["HERMES_HOME"] = str(home)
     os.environ.pop("PROVENANCE_GATE_SCOPE", None)
     os.environ["PROVENANCE_GATE_MODE"] = "observe" if scenario == "observe" else "block"
@@ -226,6 +222,24 @@ def main() -> None:
             skills[path.relative_to(skills_root).as_posix()] = path.read_text(encoding="utf-8")
     result["skills"] = skills
     out_path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def main() -> None:
+    spec = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    out_path = Path(sys.argv[2])
+    scenario = spec["scenario"]
+    # The pytest harness passes an explicit ``home`` so it can delete the directory after
+    # this process exits: on Windows a live interpreter holds handles to files inside its
+    # own HERMES_HOME, so deleting from the inside silently leaves the tree behind (that is
+    # how a full run left 95 dirs / 3.9 GB in the temp dir on 2026-10-22). Standalone use
+    # still gets a temp dir, reclaimed on the way out as a best effort.
+    owned = "home" not in spec
+    home = Path(tempfile.mkdtemp(prefix="pg-e2e-")) if owned else Path(spec["home"])
+    try:
+        _run(spec, out_path, scenario, home)
+    finally:
+        if owned:
+            shutil.rmtree(home, ignore_errors=True)
 
 
 if __name__ == "__main__":
