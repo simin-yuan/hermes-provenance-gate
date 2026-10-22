@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from . import capture, results, store, verdict
+from . import attribution, capture, repos, results, settlement, store, verdict
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,14 @@ class Gate:
             logger.warning("provenance-gate: capture failed (ignored)", exc_info=True)
         return None
 
+    def _note_repo(self, session_id: str, args: Any) -> None:
+        """Remember the repository this call is about. Costs a string scan, never raises."""
+        try:
+            if session_id:
+                repos.record(self._directory(), session_id, args)
+        except Exception:  # noqa: BLE001 - a bookkeeping miss must not touch the verdict
+            logger.debug("provenance-gate: repository note skipped", exc_info=True)
+
     def _said(self, directory: Path | None) -> list[dict]:
         """Captured rows; an unreadable store counts as "nothing typed" (claims then fail)."""
         if directory is None:
@@ -51,9 +59,10 @@ class Gate:
 
     def pre_tool_call(self, tool_name: str = "", args: Any = None, session_id: str = "",
                       turn_id: str = "", **_: Any) -> dict | None:
+        session_id, turn_id = str(session_id or ""), str(turn_id or "")
+        self._note_repo(session_id, args)
         if tool_name not in verdict.GATED_TOOLS:
             return None
-        session_id, turn_id = str(session_id or ""), str(turn_id or "")
         try:
             directory = self._directory()
         except Exception:
@@ -94,6 +103,13 @@ class Gate:
                         for c in checks]
             if directory is None:
                 raise OSError("no plugin data directory")
+            pin = repos.pin(directory, session_id)
+            for row in rows:
+                row["claim_id"] = settlement.claim_id(row)
+                if row.get("condition") == attribution.CONDITION_UNRESOLVED:
+                    # Left open at write time: record where the code stood, if that is knowable.
+                    # An empty revision is a real answer and must not be tidied away later.
+                    row["revision"] = pin
             path = directory / store.EVIDENCE_FILE
             with store.locked(path):
                 store.maybe_prune_unlocked(path, now, store.retention_days())

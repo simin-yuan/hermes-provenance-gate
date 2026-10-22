@@ -114,6 +114,9 @@ hermes provenance-gate report [--days N]                # counts by verdict and 
 hermes provenance-gate log [--limit N] [--verdict pass|blocked|would_block]
 hermes provenance-gate check "<text>" [--session ID]   # dry run, writes no rows
 hermes provenance-gate purge (--older-than DAYS | --all)
+hermes provenance-gate pending [--json]                 # claims stored with an open condition, unsettled
+hermes provenance-gate settle <claim_id> --outcome satisfied|failed|unknown \
+    --by <who> --by-kind user|ci --result "<what happened>" [--test <check>] [--revision <sha>]
 ```
 
 `--days`, `--limit` and `--older-than` must be zero or more.
@@ -196,8 +199,20 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 - **Tests.** `tests/test_hermes_strings.py` builds these blocks and turns with Hermes' own functions and checks that they are removed or skipped.
 - **Empty results.** A message made only of such blocks stores nothing.
 - **Sender and session chain.** Each row stores the turn's `sender_id`, and `parent_session_id` when the session was started by context compression.
-- **Role and condition (recorded, not judged).** Each row also stores two fields read from the quote itself: `role` (`self` / `relayed` / `unknown`) and `condition` (`none` / `unresolved` / `unknown`). Both describe what the quote *was*, never what it meant for the verdict — `"Alice decided we're using Postgres"` verifies as a quote, and the row records that it was relayed so a later version does not have to reconstruct the fact from text that no longer exists. `unresolved` means a condition marker is present (`only if`, `unless`, `as long as`); it does **not** mean the condition is unmet, because nothing here can see whether it was later satisfied. Ambiguous cases stay `unknown` rather than being forced to a side: `"Alice suggested X and I agree"` carries both a report and the user's own agreement, and a wrong `relayed` would suppress the user's decision. Neither field changes a verdict today. `tests/corpus/attribution.jsonl` holds the adversarial cases this is for.
+- **Role and condition (recorded, not judged).** Each row also stores two fields read from the quote itself: `role` (`self` / `relayed` / `unknown`) and `condition` (`none` / `unresolved` / `unknown`). Both describe what the quote *was*, never what it meant for the verdict — `"Alice decided we're using Postgres"` verifies as a quote, and the row records that it was relayed so a later version does not have to reconstruct the fact from text that no longer exists. `unresolved` means a condition marker is present (`only if`, `unless`, `as long as`); it does **not** mean the condition is unmet, because nothing here can see whether it was later satisfied. Ambiguous cases stay `unknown` rather than being forced to a side: `"Alice suggested X and I agree"` carries both a report and the user's own agreement, and a wrong `relayed` would suppress the user's decision. Neither field changes a verdict today. `tests/corpus/attribution.jsonl` holds the adversarial cases this is for. Each row also carries `claim_id` (12 hex characters, derived from session, target, claim and quote, so it survives a prune and rewrite) which is what a settlement names; a row whose condition is `unresolved` additionally carries `revision` — the commit the session had checked out, or an empty string when that cannot be known (see [Settling a condition that was left open](#settling-a-condition-that-was-left-open)).
 - **Agents that are not the user.** The curator fork (`platform="curator"`, `agent/curator.py:1119`), `delegate_task` children (`platform="subagent"`, `tools/delegate_tool.py:282`) and cron runs (`platform="cron"`, `cron/scheduler.py:2524`) fire `pre_llm_call` with text the user did not type. None of it is captured. Writes from those agents are still checked.
+
+## Settling a condition that was left open
+
+A claim like "we ship on Friday only if the benchmark passes" cannot be judged when it is written: the benchmark has not run yet. The row is stored with `condition: unresolved`. **That is not a status to be edited later** — flipping it would destroy the only trustworthy part of the record, which is what the user said and when they said it.
+
+So settlement is append-only and lives beside the evidence log, in `settlements.jsonl`:
+
+- `pending` lists the claims whose condition is still open and that nobody has settled.
+- `settle` appends one row: the outcome (`satisfied` / `failed` / `unknown`), who settled it, and the result that justifies it. The original row is never written to; the newest settlement decides the status.
+- **Who may settle.** `--by-kind` is `user` or `ci`, and the session that wrote the claim cannot settle it: an agent grading its own condition is the failure this plugin exists to prevent. A `--by` equal to that session's hash is refused too. This is a policy boundary, not a proof — a script can always claim to be a person.
+- **A revision, or nothing.** `--revision` takes a git commit sha (7–40 hex characters) and nothing else. `main`, `HEAD` or a made-up value is refused rather than stored, because a wrong sha becomes a fact that gets believed later.
+- **What the gate pins by itself.** When a write leaves a condition open, the row also carries `revision`, filled only if the session touched exactly one repository (`git -C <repo>` in a command, or a path inside a checkout) and its `HEAD` still reads. No repository, two repositories, or an unreadable `HEAD` all give an empty string, on purpose: empty beats wrong.
 
 ## Threat model
 

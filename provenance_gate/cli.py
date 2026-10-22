@@ -9,7 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
-from . import capture, store, verdict
+from . import capture, settlement, store, verdict
 
 HELP = "Summarise or inspect the provenance-gate evidence log, dry-run a check, or purge stored user text"
 DESCRIPTION = (
@@ -43,6 +43,17 @@ def setup(parser: argparse.ArgumentParser) -> None:
     group = purge.add_mutually_exclusive_group(required=True)
     group.add_argument("--older-than", type=_non_negative, metavar="DAYS", help="Delete rows older than DAYS days")
     group.add_argument("--all", action="store_true", help="Delete everything")
+    pending = sub.add_parser("pending", help="Claims stored with an open condition that nobody has settled")
+    pending.add_argument("--json", action="store_true", help="Machine-readable output")
+    settle = sub.add_parser("settle", help="Append a settlement for one claim; the claim itself is never edited")
+    settle.add_argument("claim_id", help="Claim id, as printed by `pending`")
+    settle.add_argument("--outcome", required=True, choices=settlement.OUTCOMES, help="How the condition came out")
+    settle.add_argument("--by", required=True, help="Who settled it: a person, or the CI job id")
+    settle.add_argument("--by-kind", required=True, choices=settlement.SETTLER_KINDS, dest="by_kind",
+                        help="user or ci; the agent that wrote the claim cannot settle it")
+    settle.add_argument("--result", required=True, help="The result that justifies the outcome")
+    settle.add_argument("--test", help="The check that produced it: command, run id or URL")
+    settle.add_argument("--revision", help="Commit the result is about; omit it when unknown")
 
 
 def make_handler(directory: Callable[[], Path] = store.data_dir) -> Callable[[argparse.Namespace], int]:
@@ -56,7 +67,11 @@ def make_handler(directory: Callable[[], Path] = store.data_dir) -> Callable[[ar
             return cmd_check(directory(), args.text, args.session)
         if command == "purge":
             return cmd_purge(directory(), args.older_than, args.all)
-        print("usage: hermes provenance-gate {report,log,check,purge} ...")
+        if command == "pending":
+            return cmd_pending(directory(), args.json)
+        if command == "settle":
+            return cmd_settle(directory(), args)
+        print("usage: hermes provenance-gate {report,log,check,purge,pending,settle} ...")
         return 2
     return handle
 
@@ -128,7 +143,7 @@ def cmd_check(directory: Path, text: str, session_id: str) -> int:
 
 def cmd_purge(directory: Path, older_than: int | None, purge_all: bool) -> int:
     now = store.utc_now()
-    for name in (store.SAID_FILE, store.EVIDENCE_FILE):
+    for name in (store.SAID_FILE, store.EVIDENCE_FILE, settlement.SETTLEMENTS_FILE):
         path = directory / name
         with store.locked(path):
             if purge_all:
@@ -137,4 +152,40 @@ def cmd_purge(directory: Path, older_than: int | None, purge_all: bool) -> int:
             else:
                 removed = store.drop_older_than_unlocked(path, now - timedelta(days=older_than or 0))
         print(f"{name}: removed {removed} row(s)")
+    return 0
+
+
+def cmd_pending(directory: Path, as_json: bool = False) -> int:
+    """Claims left open at write time and not settled since. Read-only."""
+    rows = settlement.pending(directory / store.EVIDENCE_FILE, directory / settlement.SETTLEMENTS_FILE)
+    if as_json:
+        for row in rows:
+            print(json.dumps(row, ensure_ascii=False))
+        return 0
+    if not rows:
+        print("no open claims")
+        return 0
+    for row in rows:
+        claim = (row.get("claim") or "").strip().replace("\n", " ")
+        if len(claim) > REPORT_CLAIM_CHARS:
+            claim = claim[:REPORT_CLAIM_CHARS - 1] + "…"
+        print(f"{row['claim_id']}  {row.get('ts', '')}  {row.get('target', '')}")
+        print(f"  claim: {claim}")
+        print(f"  wrote: {row.get('role', '')} / condition {row.get('condition', '')}"
+              f" / revision {row.get('revision') or '(none)'}")
+    print(f"\n{len(rows)} open claim(s). Settle with: settle <claim_id> --outcome ... --by ... --result ...")
+    return 0
+
+
+def cmd_settle(directory: Path, args: argparse.Namespace) -> int:
+    """Append a settlement. Prints the stored row; refuses anything that would be self-grading."""
+    try:
+        row = settlement.settle(directory / store.EVIDENCE_FILE, cid=args.claim_id, outcome=args.outcome,
+                                by=args.by, by_kind=args.by_kind, result=args.result, test=args.test,
+                                revision=args.revision,
+                                settlements_path=directory / settlement.SETTLEMENTS_FILE)
+    except settlement.SettlementRefused as refused:
+        print(f"refused: {refused}")
+        return 2
+    print(json.dumps(row, ensure_ascii=False))
     return 0
