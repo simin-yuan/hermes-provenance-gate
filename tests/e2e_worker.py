@@ -19,6 +19,16 @@ TESTS = Path(__file__).resolve().parent
 REPO = TESTS.parent
 sys.path.insert(0, str(TESTS))
 
+# Hermes' venv maps its packages (``agent``, ``run_agent``) but not the top-level helpers that sit
+# beside them, so ``import hermes_yaml`` only resolves when the checkout itself is on sys.path. The
+# real CLI runs with that directory as its working directory; this worker is started from a temp
+# directory, so it has to add the path itself.
+import importlib.util  # noqa: E402
+
+_agent_spec = importlib.util.find_spec("agent")
+if _agent_spec is not None and _agent_spec.origin:
+    sys.path.insert(0, str(Path(_agent_spec.origin).resolve().parent.parent))
+
 from fake_openai import MODEL, FakeOpenAI  # noqa: E402
 
 PLUGIN_FILES = ("plugin.yaml", "__init__.py", "provenance_gate", "LICENSE", "NOTICE")
