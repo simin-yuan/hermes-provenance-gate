@@ -50,6 +50,58 @@ def _require_free_space(path: Path, need_gb: float = 3.0) -> None:
     )
 
 
+def _shared_installs() -> Path:
+    """The one runtime store every scenario links to.
+
+    Each worker used to install a full Hermes runtime into its own temp home (~630 MB,
+    which blew past the 600 s worker timeout on 2026-10-23 and never finished). Sharing
+    the store makes the first run pay that cost once; the rest start immediately.
+    """
+    explicit = os.environ.get("PG_E2E_SHARED_INSTALLS")
+    if explicit:
+        return Path(explicit)
+    live = Path(os.environ.get("HERMES_HOME") or (Path.home() / "AppData" / "Local" / "hermes")) / "installs"
+    if live.is_dir():
+        return live
+    return Path(tempfile.gettempdir()) / "pg-e2e-shared-installs"
+
+
+def _link_installs(home: Path) -> None:
+    link = home / "installs"
+    if link.exists():
+        return
+    shared = _shared_installs()
+    shared.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(shared)],
+                       check=True, capture_output=True)
+    else:
+        os.symlink(shared, link, target_is_directory=True)
+
+
+def _unlink_junctions(path: Path) -> None:
+    """Drop junctions/symlinks before a recursive delete.
+
+    ``rd /s /q`` walks through a junction into its target, so cleaning a temp home
+    would otherwise wipe the shared runtime that every scenario points at.
+    """
+    if not path.is_dir():
+        return
+    for child in list(path.iterdir()):
+        try:
+            # ``os.path.isjunction`` only exists on 3.12+, and this suite runs on the
+            # Hermes venv's 3.11, so test the reparse-point attribute instead.
+            attrs = child.lstat().st_file_attributes
+            is_link = child.is_symlink() or bool(attrs & 0x400)
+        except (OSError, AttributeError):
+            continue
+        if is_link:
+            try:
+                os.rmdir(child)
+            except OSError:
+                pass
+
+
 def _remove_tree(path: Path) -> None:
     """Delete a temp HERMES_HOME, surviving Windows handle latency.
 
@@ -65,6 +117,7 @@ def _remove_tree(path: Path) -> None:
         except OSError:
             pass
 
+    _unlink_junctions(path)
     for delay in (0, 0.5, 1.5):
         if delay:
             time.sleep(delay)
@@ -90,6 +143,7 @@ def run(scenario: str, stream: bool, tmp_path_factory) -> dict:
         # can delete it after the child exits: a running interpreter keeps handles inside its
         # own home, so an in-child rmtree leaves the tree behind.
         home = Path(tempfile.mkdtemp(prefix="pg-e2e-"))
+        _link_installs(home)
         spec.write_text(json.dumps({"scenario": scenario, "stream": stream, "home": str(home)}),
                         encoding="utf-8")
         try:

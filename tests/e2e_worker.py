@@ -149,11 +149,16 @@ def make_responder(scripts: dict, review_marker: str):
 
 def install_plugin(home: Path) -> None:
     target = home / "plugins" / "provenance-gate"
-    target.mkdir(parents=True)
+    # Hermes 0.22.4 creates ``plugins/`` while preparing the data root's own
+    # dependencies, so a bare mkdir(parents=True) raises WinError 183 here.
+    target.mkdir(parents=True, exist_ok=True)
     for name in PLUGIN_FILES:
         src = REPO / name
         if src.is_dir():
-            shutil.copytree(src, target / name, ignore=shutil.ignore_patterns("__pycache__"))
+            # Idempotent: Hermes 0.22.4 can run this home's setup twice, and the second
+            # pass hits an already-copied tree (WinError 183).
+            shutil.copytree(src, target / name, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("__pycache__"))
         else:
             shutil.copy2(src, target / name)
 
