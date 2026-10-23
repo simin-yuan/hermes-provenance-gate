@@ -170,7 +170,9 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def _run(spec: dict, out_path: Path, scenario: str, home: Path) -> None:
-    os.environ["HERMES_HOME"] = str(home)
+    # The parent sets HERMES_HOME before this interpreter starts. Overwriting it here would
+    # switch homes mid-process, after Hermes' bootstrap already picked an environment.
+    os.environ.setdefault("HERMES_HOME", str(home))
     os.environ.pop("PROVENANCE_GATE_SCOPE", None)
     os.environ["PROVENANCE_GATE_MODE"] = "observe" if scenario == "observe" else "block"
     install_plugin(home)

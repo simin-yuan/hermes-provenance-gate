@@ -133,6 +133,52 @@ def _remove_tree(path: Path) -> None:
             return
 
 
+def _hermes_python() -> str:
+    """The interpreter Hermes itself runs on, when this machine provisions one.
+
+    The checkout venv and Hermes' app environment can be different minor versions (3.11 vs
+    3.14 here), and a worker started on the wrong one dies on a C extension
+    (``pydantic_core._pydantic_core``) rather than on anything this test is about.
+    ``facts.json`` records the environment Hermes committed to.
+    """
+    root = Path(os.environ.get("HERMES_HOME") or (Path.home() / "AppData" / "Local" / "hermes"))
+    best: tuple[float, Path] | None = None
+    for facts in root.glob("installs/*/facts.json"):
+        try:
+            data = json.loads(facts.read_text(encoding="utf-8-sig"))
+            env_dir = ((data.get("packages") or {}).get("venv") or {}).get("environment")
+        except (OSError, ValueError):
+            continue
+        if not env_dir:
+            continue
+        exe = Path(env_dir) / "Scripts" / "python.exe"
+        if exe.is_file():
+            mtime = facts.stat().st_mtime
+            if best is None or mtime > best[0]:
+                best = (mtime, exe)
+    return str(best[1]) if best else sys.executable
+
+
+def _worker_env(home: Path) -> dict:
+    """Environment for the worker: its own HERMES_HOME, set before the interpreter starts.
+
+    The worker used to do this itself, after Hermes' bootstrap had already initialised the
+    default home. Switching HERMES_HOME mid-process leaves the borrowed-home launch on the
+    first interpreter, which cannot see the packages the checkout has
+    (``ModuleNotFoundError: No module named 'ruamel'``). Setting it here means the bootstrap
+    only ever sees one home.
+    """
+    env = os.environ.copy()
+    env["HERMES_HOME"] = str(home)
+    # Hermes' bootstrap syncs dependencies for a borrowed home on the first `agent` import, and
+    # a failed sync leaves the process on a half-built environment: `hermes_yaml` then cannot
+    # import `ruamel`, even though the checkout venv has it. The sync is what makes this test
+    # depend on a reachable package index (`uv sync exited 2: failed to download cffi==2.1.1`),
+    # which an end-to-end test should not need — this venv already carries every dependency.
+    env["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
+    return env
+
+
 def run(scenario: str, stream: bool, tmp_path_factory) -> dict:
     key = (scenario, stream)
     if key not in _cache:
@@ -147,8 +193,9 @@ def run(scenario: str, stream: bool, tmp_path_factory) -> dict:
         spec.write_text(json.dumps({"scenario": scenario, "stream": stream, "home": str(home)}),
                         encoding="utf-8")
         try:
-            proc = subprocess.run([sys.executable, str(WORKER), str(spec), str(out)], capture_output=True,
-                                  text=True, encoding="utf-8", errors="replace", timeout=600)
+            proc = subprocess.run([_hermes_python(), str(WORKER), str(spec), str(out)], capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace", timeout=600,
+                                  env=_worker_env(home))
         finally:
             _remove_tree(home)
         assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
