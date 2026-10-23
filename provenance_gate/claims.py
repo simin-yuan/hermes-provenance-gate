@@ -32,14 +32,21 @@ _SPLIT_POINTS = re.compile(r'["“”「」『』。！？；]|[.!?;](?=\s|$)')
 SUBJECT_HINT = re.compile(r"user|owner|用户|用戶|主人|老板|老闆", re.IGNORECASE)
 _WORD = re.compile(r"[A-Za-z][A-Za-z'’.]*")
 _WINDOW = 120  # characters before a match that the subject checks look at
-_KEY_VALUE = re.compile(r"^\s*([^:=\n]{1,60}?)\s*(?::|=)(?=\s|$)")
+# Both of these ran quadratic on whitespace-heavy input: two adjacent unbounded whitespace runs, retried
+# from every offset. A 1 MB run of spaces hung the first and the second (only tool results, pages and
+# notes are ever passed here, and those are not size-capped). The rewrites keep the meaning and make the
+# scan linear: the key may not end in whitespace, and the whitespace runs before and after it are
+# possessive (Python 3.11+, which is what this plugin runs on), so neither is retried.
+_KEY_VALUE = re.compile(r"^\s*+([^:=\s](?:[^:=\n]{0,58}?[^:=\s])?)\s*+[:=](?=\s|$)")
 _IDENTIFIER_KEY = re.compile(r"^[A-Za-z_][\w.\-/()\[\]]*$")
 _SCALAR_VALUE = re.compile(r"^(?:true|false|yes|no|null|none|nil|~|on|off|-?\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*')?$",
                            re.IGNORECASE)
 _WORD_VALUE = re.compile(r"^\S{1,24}$")
 _ZH_BRACKETED = re.compile(r"「[^」]*」|『[^』]*』|（[^）]*）|\([^)]*\)|“[^”]*”|\"[^\"]*\"")
 _EMPHASIS = re.compile(r"\*\*|__")
-_TRAILING_PAREN = re.compile(r"\s*\([^()]{0,80}\)\s*[.!]?\s*$")
+# Same class: the leading \s* was retried at every offset; the trailing whitespace it absorbed is dropped
+# by the caller's rstrip anyway.
+_TRAILING_PAREN = re.compile(r"\([^()]{0,80}\)[.!]?\s*$")
 _ZH_CLAUSE_END = re.compile(r"[，。；！？,;!?\n]")
 
 
