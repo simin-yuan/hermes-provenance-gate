@@ -42,7 +42,13 @@ _IDENTIFIER_KEY = re.compile(r"^[A-Za-z_][\w.\-/()\[\]]*$")
 _SCALAR_VALUE = re.compile(r"^(?:true|false|yes|no|null|none|nil|~|on|off|-?\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*')?$",
                            re.IGNORECASE)
 _WORD_VALUE = re.compile(r"^\S{1,24}$")
-_ZH_BRACKETED = re.compile(r"「[^」]*」|『[^』]*』|（[^）]*）|\([^)]*\)|“[^”]*”|\"[^\"]*\"")
+# Same class again, found in the 0.1.2 self-audit: every alternative was `<opener> [^<closer>]* <closer>`
+# with the middle run unbounded, so on input made only of openers (`「` × 40k) each start position scanned
+# to the end of the string before failing — quadratic (×15.6 from 10k to 40k, 0.79 s at 40k).
+# The content runs are now bounded: the only caller feeds a ≤`_WINDOW` (120) character slice, so 200 leaves
+# headroom and the worst case becomes linear in the input instead of quadratic.
+_ZH_BRACKETED = re.compile(
+    r"「[^」]{0,200}」|『[^』]{0,200}』|（[^）]{0,200}）|\([^)]{0,200}\)|“[^”]{0,200}”|\"[^\"]{0,200}\"")
 _EMPHASIS = re.compile(r"\*\*|__")
 # Same class: the leading \s* was retried at every offset; the trailing whitespace it absorbed is dropped
 # by the caller's rstrip anyway.
