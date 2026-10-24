@@ -243,6 +243,29 @@ Claim detection was measured on `tests/corpus/blind.jsonl`: 133 realistic memory
 
 No ordinary line was flagged, including decisions by other people ("PM decided …", "Board approved …", 产品经理决定 …). The misses are wordings outside the patterns, for example "User wants all commit messages in Conventional Commits format", "We agreed to pin numpy below 2.0", "Dana picked FastAPI", "The user said no to offering lifetime deals", 用户说以后不要再自动提交代码, 负责人已经同意上线. One set of 133 lines is a small sample; your own text will differ, which is why observe mode is the default.
 
+## Real-world case: DEUSPROOF certificate #3,308
+
+[DEUSPROOF](https://deusproof.com/) is a public register of AI agents: it hashes what an agent posts, obtains a timestamp, and anchors the digest in Bitcoin. On 14 October 2026 it issued a certificate for an agent on that register — inscription No. 003.308, Verify ID `46c2ac75-…`, Bitcoin block 971,331. The parts that hold up are worth stating first:
+
+- **The digest points at a real post, and the post hashes to it.** The certificate's `source_url` resolves to the post, and the live post body hashes to `a99eac9e…` byte-for-byte against the text that was published.
+- **The Bitcoin anchor checks out independently of the register.** `mempool.space/api/block-height/971331` gives block `00000000000000000000b8eff3…`, mined `2026-10-14T01:19:51Z` — 12 min 55 s after the register wrote the entry at `01:06:56Z`.
+- **The authorship tier is not oversold in the small print.** The certificate body says it "does not attest origin or authorship", and its authorship panel reads `WITNESSED` directly above `No agent signature — authorship asserted from the source`.
+
+Four things are nevertheless inconsistent, or cannot be checked from public information:
+
+1. **The work hash cannot be re-verified from public information.** The certificate lists `output_hash = 9bfdd072…1770`. The post body as published does not reproduce it under any of six normalisations — raw bytes, whitespace-stripped, CRLF-normalised, `title + body`, JSON `{title, content}`, JSON `{content}` — nor does any prefix of the body: 1,893 prefixes tried, by character and by word, with `\n` and `\n\n` separators. The register also sets `content_removed_at = 2026-10-20T15:40:26Z`, so the body behind that hash has been deleted and a third party can no longer check it either. A register that asks not to be trusted on the operator's word can only be audited while the plaintext is still there.
+2. **The weights printed on the page do not reproduce the score printed on the page.** The work page's Score Decomposition shows `Cosine × 0.40 / Iteration × 0.30 / Semantic × 0.20 / Tool × 0.10`, which yields **35.51** when the cosine term is the distance and **45.16** when it is the similarity. The published score is **33.89** (displayed as 34/100). The weights in the signed manifest — `0 / 0.5 / 0.333333 / 0.166667` — reproduce 33.89 exactly. The page footer says `v1.0`; the manifest says `AAS v1.1`. Anyone re-deriving the score from what the page shows will arrive at a different number than the certificate.
+3. **The score covers about a fifth of the work.** `output_tokens = 100` against a body of roughly 473 tokens. The similarity term is additionally pinned to zero (`prompt_inferred = true`, no `prompt_text`), which leaves three textual-shape terms: iteration 0.5, semantic complexity 0.333, tool diversity 0.167.
+4. **The share text contradicts the certificate.** The certificate states that it does not attest authorship. The share button on the same page hands the operator this text, pre-written: *"Certified machine authorship — AAS 34/100, sealed on an append-only ledger and anchored to Bitcoin."* A timestamp proves *when* a text existed; a signature proves *who* wrote it, and this record carries none — `key_of_record = null`, `held_by_agent = false`. Ownership was later claimed through a one-time code placed in the agent's public profile (no key was created, `key_of_record` stayed null), which proves control of a profile, not authorship of a post.
+
+That is the failure this plugin guards against, one layer out: a record honest about its limits, and a summary built from it that is not.
+
+![DEUSPROOF authorship panel: WITNESSED directly above "No agent signature — authorship asserted from the source"](docs/deusproof-authorship-panel.png)
+
+- Certificate: <https://deusproof.com/verify/46c2ac75-326d-4060-907d-458f01d8b804>
+- Public note: <https://x.com/yleven120/status/2114081323786916046>
+- Observations were taken from the register's own JSON (`/api/verify/{id}`, `/api/agents/{did}/birth`), the live post body, page captures before and after ownership was claimed, and a scripted re-derivation of the score and the hash. The bundle lives outside this repository; the numbers above are reproducible from the public endpoints while `content_removed_at` stays fixed.
+
 ## Where this comes from
 
 The check here is narrow, and it comes from a measurement rather than from intuition. In *History Is Not
