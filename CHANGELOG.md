@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.3 — 2026-10-25
+
+- Added the timing test for `_ZH_BRACKETED` (`tests/test_performance.py::test_zh_brackets_stay_linear`):
+  three shapes made only of opening brackets (`「`, `（`, `“`), each measured in its own process at
+  40,000 and 160,000 characters with a hard 60 s timeout. The test fails when 4x the data costs more
+  than 8x the time, or when 160,000 characters cost more than 0.5 s. On the 0.1.1 pattern it fails:
+  160,000 `「` took 11.7 s.
+- No pattern changed in this release. All 46 patterns were measured again with the fixed adversarial
+  shape set (10k and 40k characters, child process, hard timeout): none of them grows faster than
+  the data.
+- Measured for this release, same script and same machine: 10,000 characters 0.0020 s, 40,000
+  characters 0.0080 s, a growth of x3.8 to x4.1 across the three shapes. The times in the 0.1.2
+  section come from a different run; use these.
+- Corpus unchanged: 213 legitimate lines are blocked 0 times, and all 174 claim cases give the same
+  action, reason and evidence source as 0.1.2 (per-line diff is empty).
+
 ## 0.1.2 — 2026-10-25
 
 - Fixed a third super-linear pattern in `claims.py`, found by re-auditing every regex in this plugin
@@ -12,7 +28,9 @@
     (`_WINDOW`), so detection results are unchanged for every input that can actually reach it;
     the worst case drops from quadratic to linear. Output equivalence was checked by differential
     testing against the 0.1.1 pattern on 200,000 random strings.
-  - Measured after the fix: 40k characters cost 0.006 s (was 0.79 s), ×1.0 across the 10k → 40k step.
+  - Measured after the fix: 40k characters cost well under 0.01 s (was 0.79 s). (The figure here
+    and the one in the commit message come from a different measurement run; the 0.1.3 section has
+    the numbers to use.)
 
 ## 0.1.1 — 2026-10-23
 

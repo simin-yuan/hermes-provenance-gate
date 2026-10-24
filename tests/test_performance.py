@@ -109,3 +109,55 @@ def test_whitespace_runs_do_not_hang(name):
     assert proc.returncode == 0, proc.stderr.strip()[-1500:]
     elapsed = float(proc.stdout.strip().splitlines()[-1])
     assert elapsed < 1.0, f"{name}: {elapsed:.3f}s"
+
+
+ZH_WORKER = """
+import sys, time
+sys.path.insert(0, {root!r})
+from provenance_gate.claims import _ZH_BRACKETED as RX
+text = {expr}
+start = time.perf_counter()
+RX.sub("", text)
+print(f"{{time.perf_counter() - start:.5f}}")
+"""
+
+ZH_OPENERS = {
+    # _ZH_BRACKETED was <opener>[^<closer>]*<closer> for six bracket kinds. Input made only of openers
+    # is the worst shape: no position can ever close, so an unbounded run made every start position scan
+    # to the end of the string. Measured on the 0.1.1 pattern: 40k cost 0.79 s and 160k cost 12.6 s
+    # (x16 for 4x the data). The runs are bounded now; these cases hold that in place.
+    "corner brackets": "'「' * {n}",
+    "full-width parens": "'（' * {n}",
+    "curly quotes": "'“' * {n}",
+}
+
+ZH_SMALL = 40_000
+ZH_LARGE = 160_000  # 4x the data: linear stays near x4, a quadratic pattern goes to x16
+
+
+def _zh_seconds(root: Path, expr: str, timeout: float = 60.0) -> float:
+    """One measurement, in its own process: re cannot be interrupted, so a regression must fail the
+    suite with a message instead of wedging it."""
+    import subprocess
+    import sys
+
+    script = ZH_WORKER.format(root=str(root), expr=expr)
+    try:
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                              timeout=timeout, cwd=str(root))
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"{expr}: still running after {timeout:.0f} s — super-linear again")
+    assert proc.returncode == 0, proc.stderr.strip()[-1500:]
+    return float(proc.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.parametrize("name", list(ZH_OPENERS))
+def test_zh_brackets_stay_linear(name):
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    small = min(_zh_seconds(root, ZH_OPENERS[name].format(n=ZH_SMALL)) for _ in range(3))
+    large = min(_zh_seconds(root, ZH_OPENERS[name].format(n=ZH_LARGE)) for _ in range(3))
+    assert large < 0.5, f"{name}: {large:.3f}s at {ZH_LARGE} characters"
+    ratio = large / small
+    assert ratio < 8, f"{name}: x{ratio:.1f} for 4x the data ({small:.4f}s -> {large:.4f}s)"
