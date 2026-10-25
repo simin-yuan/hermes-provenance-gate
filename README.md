@@ -248,7 +248,8 @@ No ordinary line was flagged, including decisions by other people ("PM decided �
 [DEUSPROOF](https://deusproof.com/) is a public register of AI agents: it hashes what an agent posts, obtains a timestamp, and anchors the digest in Bitcoin. On 14 October 2026 it issued a certificate for an agent on that register — inscription No. 003.308, Verify ID `46c2ac75-…`, Bitcoin block 971,331. The parts that hold up are worth stating first:
 
 - **The digest points at a real post, and the post hashes to it.** The certificate's `source_url` resolves to the post, and the live post body hashes to `a99eac9e…` byte-for-byte against the text that was published.
-- **The Bitcoin anchor checks out independently of the register.** `mempool.space/api/block-height/971331` gives block `00000000000000000000b8eff3…`, mined `2026-10-14T01:19:51Z` — 12 min 55 s after the register wrote the entry at `01:06:56Z`.
+- **The Bitcoin anchor checks out end to end, with no trust in the register.** The bytes actually stamped are the ASCII string `prompt_hash:output_hash:id` (166 bytes, fetched from `/api/anchors/seed/{id}`); their SHA-256 is `d390916e…15fe`, which is the digest embedded in the `.ots` proof. The proof's op chains — 72 ops to block 971,330 and 76 ops to 971,331 — terminate in merkle roots `ee08b58f…97ff` and `22f42844…e035`. Both block headers were fetched separately, 80 bytes each, `sha256d` reproduces the block hashes, and each header's own `merkle_root` field equals the terminal value of the matching chain. So the record provably existed before `2026-10-14T01:19:51Z`, and nothing about that conclusion depends on DEUSPROOF: the arithmetic is in `cases/deusproof-3308/` and runs offline against the committed proof.
+  What this does **not** establish is the link from *text* to `output_hash` — the anchor covers `sha256("prompt_hash:output_hash:id")`, so it fixes that a record with that hash existed at that time, not that any particular text hashes to it. Item 1 below is unaffected.
 - **The authorship tier is not oversold in the small print.** The certificate body says it "does not attest origin or authorship", and its authorship panel reads `WITNESSED` directly above `No agent signature — authorship asserted from the source`.
 
 Four things are nevertheless inconsistent, or cannot be checked from public information:
@@ -264,7 +265,20 @@ That is the failure this plugin guards against, one layer out: a record honest a
 
 - Certificate: <https://deusproof.com/verify/46c2ac75-326d-4060-907d-458f01d8b804>
 - Public note: <https://x.com/yleven120/status/2114081323786916046>
-- Observations were taken from the register's own JSON (`/api/verify/{id}`, `/api/agents/{did}/birth`), the live post body, page captures before and after ownership was claimed, and a scripted re-derivation of the score and the hash. The bundle lives outside this repository; the numbers above are reproducible from the public endpoints while `content_removed_at` stays fixed.
+- Observations were taken from the register's own JSON (`/api/verify/{id}`, `/api/agents/{did}/birth`), the live post body, page captures before and after ownership was claimed, and a scripted re-derivation of the score and the hash. The anchor arithmetic and the exact bytes it was run against are in [`cases/deusproof-3308/`](cases/deusproof-3308/); everything else is reproducible from the public endpoints while `content_removed_at` stays fixed.
+
+Reproducing the anchor check from the committed artifacts:
+
+```sh
+cd cases/deusproof-3308
+npm install javascript-opentimestamps
+node ots_path.js proof.ots          # digest + op chains -> terminal merkle roots
+python check_headers.py verify.json seed.txt \
+  971330:000000000000000000015e6e5a8540a5f6e72c5010f9041ca2cae32d7f457646 \
+  971331:00000000000000000000b8eff33d212010fa390b3f829eaf373e7068cbe4444b
+```
+
+`ots_path.js` needs only the proof file; `check_headers.py` re-derives the seed from the certificate, hashes it, compares that to the digest inside the proof, and checks both block headers against the block hashes (the header's own `sha256d` makes it self-validating — no API has to be trusted for the arithmetic).
 
 ## Where this comes from
 
