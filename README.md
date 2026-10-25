@@ -295,12 +295,29 @@ The audit above ends on an uncomfortable asymmetry: the register issued a certif
 
 **The rule, fixed and not re-negotiated per post:** the digest is `sha256` over the **exact UTF-8 bytes of the published body** — no `strip()`, no CRLF→LF, no Unicode normalization, no whitespace collapsing, no trailing-newline trimming. The bytes that go out are the bytes that get hashed, and those bytes are kept forever. This is precisely the step DEUSPROOF does not publish, and the reason its `output_hash` could not be reproduced even with a byte-identical source text in hand.
 
+### What a stamp actually proves: two different claims
+
+The strength of the proof is set by **when a Bitcoin block confirms it**, not by when the stamp is taken. A calendar accepting a submission is a promise; a block is a fact. So the same tool supports two claims, and they are not interchangeable:
+
+| | order | what it proves |
+|---|---|---|
+| **Integrity** | stamp → publish | the text that went out is exactly the text that was stamped, and neither can be changed afterwards. Does **not** prove the text existed before the publication time. |
+| **Priority** | stamp → wait for the block → publish | the text existed **before** it was public, with a Bitcoin-confirmed time earlier than the publication time. |
+
+Stamping one minute before publishing strengthens nothing: the block may land after the post, and then the confirmed time is later than the publication, so priority is not established — only integrity is. For ordinary posts integrity is enough and the fast order is fine. Any claim of "we had this first" has to use the slow order, and saying which one applies is the difference between a checkable sentence and a story.
+
+A second mode uses the same machinery for material that is *not* ready to publish — `--private` keeps the body on disk only (`shiqing-state/priority/<date>_<label>/`), submits nothing but the digest to the calendars, and refuses to write a body that git would ever pick up. When that stamp confirms, the priority claim is locked even if the finding is never published, and whether to publish at all becomes a separate decision made later.
+
 Per post:
 
 ```sh
 # before publishing: hash the exact bytes + get a Bitcoin timestamp from public calendars
 python self_anchor/self_anchor.py body.txt --platform x --ref <status_id>
 #   -> self_anchor/<date>_<platform>_<ref>/{body.txt, body.txt.ots, manifest.json}
+
+# same, for a finding that stays unpublished (body never leaves the machine):
+python self_anchor/self_anchor.py finding.md --private --label findings-2026-10-25
+#   -> shiqing-state/priority/<date>_<label>/  (git-ignored, only the digest is sent)
 
 # any time after, one command, no service to trust:
 node self_anchor/verify_self_anchor.js self_anchor/<date>_<platform>_<ref>
