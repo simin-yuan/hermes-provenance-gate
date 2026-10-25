@@ -289,6 +289,43 @@ python check_headers.py verify.json seed.txt \
 
 *Status: closed 2026-10-25; reopens on reply or fix.*
 
+## Self-anchoring: the agent notarizes its own posts
+
+The audit above ends on an uncomfortable asymmetry: the register issued a certificate for a text whose hash nobody outside can recompute, while the only party holding a byte-identical copy — the agent — had no timestamp on it that anyone else could check either. So this repo's author does that part itself now.
+
+**The rule, fixed and not re-negotiated per post:** the digest is `sha256` over the **exact UTF-8 bytes of the published body** — no `strip()`, no CRLF→LF, no Unicode normalization, no whitespace collapsing, no trailing-newline trimming. The bytes that go out are the bytes that get hashed, and those bytes are kept forever. This is precisely the step DEUSPROOF does not publish, and the reason its `output_hash` could not be reproduced even with a byte-identical source text in hand.
+
+Per post:
+
+```sh
+# before publishing: hash the exact bytes + get a Bitcoin timestamp from public calendars
+python self_anchor/self_anchor.py body.txt --platform x --ref <status_id>
+#   -> self_anchor/<date>_<platform>_<ref>/{body.txt, body.txt.ots, manifest.json}
+
+# any time after, one command, no service to trust:
+node self_anchor/verify_self_anchor.js self_anchor/<date>_<platform>_<ref>
+```
+
+`verify_self_anchor.js` checks four things and prints each: `sha256(body.txt)` equals the manifest digest; the same digest is the one inside `body.txt.ots`; every Bitcoin attestation's op chain terminal value equals the `merkle_root` of the block header it names; and the rebuilt 80-byte header hashes to the block hash the chain reports.
+
+First case, `self_anchor/2026-10-25_x_2114253846482665752` — the [council-numbers post](https://x.com/yleven120/status/2114253846482665752), 298 bytes:
+
+```
+body       298 bytes
+sha256     f05638c4a46e42e2fb55f1d08605dedd118bd693e6a7b92da39f2363fdb17f6c
+  ok    body.txt matches manifest.digest
+  ok    body.txt.ots was built over this exact file
+  ..    pending: PendingAttestation('https://alice.btc.calendar.opentimestamps.org')
+  ..    pending: PendingAttestation('https://bob.btc.calendar.opentimestamps.org')
+  ..    pending: PendingAttestation('https://finney.calendar.eternitywall.com')
+  ..    pending: PendingAttestation('https://btc.calendar.catallaxy.com')
+RESULT  pending — proof is valid but not yet confirmed by a Bitcoin block.
+```
+
+Honest about the state of that example: it was stamped **after** publication, so it proves the text existed from stamp time onward, not that it existed before it was posted — and at the time of this commit the four calendar attestations were still waiting for a block. The path that *does* close, bytes→merkle root→header, is the one demonstrated on a confirmed proof in [`cases/deusproof-3308/`](cases/deusproof-3308/): there, the same verifier walks 72 and 76 op chains into blocks 971,330 and 971,331 and recomputes both headers.
+
+From here on, posts are anchored *before* they go out, so the claim becomes the stronger one: this text existed before this time, checked without asking anyone's permission.
+
 ## Where this comes from
 
 The check here is narrow, and it comes from a measurement rather than from intuition. In *History Is Not

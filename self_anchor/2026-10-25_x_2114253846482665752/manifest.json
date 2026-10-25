@@ -1,0 +1,10 @@
+{
+ "hash_rule": "sha256 over the exact UTF-8 bytes of the published body; no normalization, no stripping, no line-ending conversion",
+ "algo": "sha256",
+ "digest": "f05638c4a46e42e2fb55f1d08605dedd118bd693e6a7b92da39f2363fdb17f6c",
+ "bytes": 298,
+ "platform": "x",
+ "ref": "2114253846482665752",
+ "source_file": "open_world\\deusproof_20261025\\tweet2_draft.txt",
+ "created_at_utc": "2026-10-25T07:21:39+00:00"
+}

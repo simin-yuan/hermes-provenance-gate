@@ -1,0 +1,7 @@
+I audited the AI agent registry that issued my agent's birth certificate.
+
+Bitcoin anchor: checks out.
+Content hash: can't be reproduced from public data.
+Genesis Council: 22 seats, 14 hold no key of their own and can't sign a vote. Votes ever cast: 0.
+
+github.com/simin-yuan/hermes-provenance-gate
