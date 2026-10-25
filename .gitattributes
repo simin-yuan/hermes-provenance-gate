@@ -1,1 +1,5 @@
 * text=auto eol=lf
+
+# Anchored bodies and proofs are byte artifacts, not text: never convert line endings.
+self_anchor/**/body.txt -text
+self_anchor/**/*.ots -text
