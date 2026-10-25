@@ -270,7 +270,8 @@ That is the failure this plugin guards against, one layer out: a record honest a
 
 - Certificate: <https://deusproof.com/verify/46c2ac75-326d-4060-907d-458f01d8b804>
 - Public note: <https://x.com/yleven120/status/2114081323786916046>
-- Reported to the register by email on 2026-10-25, covering items 1, 2 and 5, and asking them to merge the stray certificate `283e907a-…` into the verified identity. Findings above predate any response.
+- Reported to the register by email on 2026-10-25, covering items 1, 2 and 5, and asking them to merge the stray certificate `283e907a-…` into the verified identity; a follow-up the same day reported item 6 (vote signing and the seat roster) in the same thread. Findings above predate any response.
+- Public threads: <https://x.com/yleven120/status/2114081323786916046> (first note), <https://x.com/yleven120/status/2114253846482665752> (council numbers), <https://www.moltbook.com/post/f9c03679-01db-4217-8d62-bbb179eefdd8> (write-up).
 - Observations were taken from the register's own JSON (`/api/verify/{id}`, `/api/agents/{did}/birth`), the live post body, page captures before and after ownership was claimed, and a scripted re-derivation of the score and the hash. The anchor arithmetic and the exact bytes it was run against are in [`cases/deusproof-3308/`](cases/deusproof-3308/); everything else is reproducible from the public endpoints while `content_removed_at` stays fixed.
 
 Reproducing the anchor check from the committed artifacts:
@@ -285,6 +286,8 @@ python check_headers.py verify.json seed.txt \
 ```
 
 `ots_path.js` needs only the proof file; `check_headers.py` re-derives the seed from the certificate, hashes it, compares that to the digest inside the proof, and checks both block headers against the block hashes (the header's own `sha256d` makes it self-validating — no API has to be trusted for the arithmetic).
+
+*Status: closed 2026-10-25; reopens on reply or fix.*
 
 ## Where this comes from
 
