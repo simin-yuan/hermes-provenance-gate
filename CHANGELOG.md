@@ -1,52 +1,31 @@
 # Changelog
 
-## 0.1.3 — 2026-10-25
+## 0.1.6 — 2026-10-28
 
-- Added the timing test for `_ZH_BRACKETED` (`tests/test_performance.py::test_zh_brackets_stay_linear`):
-  three shapes made only of opening brackets (`「`, `（`, `“`), each measured in its own process at
-  40,000 and 160,000 characters with a hard 60 s timeout. The test fails when 4x the data costs more
-  than 8x the time, or when 160,000 characters cost more than 0.5 s. On the 0.1.1 pattern it fails:
-  160,000 `「` took 11.7 s.
-- No pattern changed in this release. All 46 patterns were measured again with the fixed adversarial
-  shape set (10k and 40k characters, child process, hard timeout): none of them grows faster than
-  the data.
-- Measured for this release, same script and same machine: 10,000 characters 0.0020 s, 40,000
-  characters 0.0080 s, a growth of x3.8 to x4.1 across the three shapes. The times in the 0.1.2
-  section come from a different run; use these.
-- Corpus unchanged: 213 legitimate lines are blocked 0 times, and all 174 claim cases give the same
-  action, reason and evidence source as 0.1.2 (per-line diff is empty).
+**Fixed: `self_anchor` could overwrite the bytes an existing timestamp proof covers.**
 
-## 0.1.2 — 2026-10-25
+The directory was derived from the date and the platform, so a second anchor to the same platform on the
+same day landed in the directory the first one was using, and `body.txt` was copied over unconditionally.
+The old `body.txt.ots` stayed where it was, so the next `ots stamp` printed a success line for a file
+whose proof described the previous bytes. A timestamp that looks valid and proves nothing is worse than
+no timestamp at all, and this tool's only product is that claim.
 
-- Fixed a third super-linear pattern in `claims.py`, found by re-auditing every regex in this plugin
-  against a fixed adversarial shape set (10k → 40k characters, hard timeout, child process):
-  - `_ZH_BRACKETED`: each alternative was `<opener>[^<closer>]*<closer>` with an unbounded middle run.
-    On input made only of openers (`「` × 40k) every start position scanned to the end before failing:
-    ×15.6 from 10k to 40k, 0.79 s at 40k. The same pattern is present unchanged in 0.1.0 and 0.1.1 —
-    this is not a regression introduced by 0.1.1.
-  - The middle runs are now bounded to 200 characters. The only caller passes a ≤120-character slice
-    (`_WINDOW`), so detection results are unchanged for every input that can actually reach it;
-    the worst case drops from quadratic to linear. Output equivalence was checked by differential
-    testing against the 0.1.1 pattern on 200,000 random strings.
-  - Measured after the fix: 40k characters cost well under 0.01 s (was 0.79 s). (The figure here
-    and the one in the commit message come from a different measurement run; the 0.1.3 section has
-    the numbers to use.)
+`--out` is now required and never inferred. The run refuses when the target directory already holds
+different bytes, when a proof is there with no body beside it, or when `manifest.json` records a
+different digest. Identical bytes are a no-op: the body and the original manifest are left alone, since a
+second run is not a second anchoring.
 
-## 0.1.1 — 2026-10-23
+This was not hypothetical — it happened while anchoring this repository's own convention document, and
+the proof was recovered by hand from a copy. The check that would have stopped it is now the first thing
+the tool does.
 
-- Fixed two super-linear patterns in `claims.py`, found in a self-audit after the same class was
-  reported against a sibling plugin (NousResearch/hermes-agent#142381). Both had two adjacent
-  unbounded whitespace runs that were retried from every backtrack position:
-  - `_KEY_VALUE`: `"key"` followed by 1 MiB of spaces cost 0.67 s before reaching the separator.
-  - `_TRAILING_PAREN`: `"a"` + 1 MiB of spaces + `"b"` — a run of whitespace with no parenthesis in
-    it — did not finish in 30 s, because `sub()` retried the leading `\s*` at every offset.
-  Both now take under 5 ms on the same input. The rewrites use possessive quantifiers, so this
-  release needs Python 3.11+ (Hermes itself runs on 3.14).
-- Added those shapes to `tests/test_performance.py`, each in its own process with a 20 s timeout so a
-  regression fails the suite instead of wedging it, and three whitespace entries to the end-to-end
-  adversarial set.
-- No change to what is or is not flagged: `_KEY_VALUE` still takes a key of at most 60 characters
-  that may contain spaces but no longer captures trailing whitespace into the key (the caller strips
-  it), and `_TRAILING_PAREN` relies on the caller's `rstrip()` for the whitespace it used to absorb.
+Tests: 58 passed, 1 skipped (`python -m pytest tests/test_verdict_hooks.py tests/test_cli.py
+tests/test_self_anchor.py -q`), two of them for this fix.
 
-Earlier versions: see `git log`.
+## 0.1.5 — 2026-10-27
+
+Docs-only: convention v0.1.1, which corrects a false statement about another plugin's `rule_key`.
+
+## 0.1.4 — 2026-10-27
+
+`ask` mode, with `rule_key` = `provenance-gate:<reason>`; convention v0.1 published alongside.

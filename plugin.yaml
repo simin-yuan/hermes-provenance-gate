@@ -1,5 +1,5 @@
 name: provenance-gate
-version: 0.1.5
+version: 0.1.6
 author: "Simin Yuan"
 requires_hermes: ">=0.22.2"
 description: >-

@@ -328,16 +328,24 @@ Per post:
 
 ```sh
 # before publishing: hash the exact bytes + get a Bitcoin timestamp from public calendars
-python self_anchor/self_anchor.py body.txt --platform x --ref <status_id>
-#   -> self_anchor/<date>_<platform>_<ref>/{body.txt, body.txt.ots, manifest.json}
+python self_anchor/self_anchor.py body.txt --out anchored/<status_id> --platform x --ref <status_id>
+#   -> anchored/<status_id>/{body.txt, body.txt.ots, manifest.json}
 
 # same, for a finding that stays unpublished (body never leaves the machine):
-python self_anchor/self_anchor.py finding.md --private --label findings-2026-10-25
-#   -> shiqing-state/priority/<date>_<label>/  (git-ignored, only the digest is sent)
+python self_anchor/self_anchor.py finding.md --out ~/shiqing-state/priority/findings-2026-10-25 \
+    --private --ref findings-2026-10-25
+#   -> that directory (git-ignored, only the digest is sent)
 
 # any time after, one command, no service to trust:
-node self_anchor/verify_self_anchor.js self_anchor/<date>_<platform>_<ref>
+node self_anchor/verify_self_anchor.js anchored/<status_id>
 ```
+
+`--out` is required and is never derived from the date or the platform: two posts to the same platform
+on the same day used to land in one directory, and the second one overwrote the first one's `body.txt`
+while leaving its proof in place. The run now refuses if the directory already holds different bytes,
+if a proof is there with no body beside it, or if the manifest records a different digest. Re-running
+on the same bytes is a no-op — it keeps the original manifest, because that manifest says when those
+bytes were first anchored and a second run is not a second anchoring.
 
 `verify_self_anchor.js` checks four things and prints each: `sha256(body.txt)` equals the manifest digest; the same digest is the one inside `body.txt.ots`; every Bitcoin attestation's op chain terminal value equals the `merkle_root` of the block header it names; and the rebuilt 80-byte header hashes to the block hash the chain reports.
 
