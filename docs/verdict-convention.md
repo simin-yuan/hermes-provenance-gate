@@ -1,9 +1,10 @@
-# Hermes plugin verdict convention — v0.1.1
+# Hermes plugin verdict convention — v0.1.2
 
 For plugins that answer `pre_tool_call`. Three rules: how to name a `rule_key`, how to expose an
 observe/act switch, and what to record. Nothing here needs a change in Hermes.
 
-**Status:** v0.1 published 2026-10-27; v0.1.1 same day corrects one row of the plugin table (see Changelog). Written against `NousResearch/hermes-agent@main`,
+**Status:** v0.1 published 2026-10-27; v0.1.1 the same day corrects one row of the plugin table; v0.1.2
+replaces a single default with a declaration (see Changelog). Written against `NousResearch/hermes-agent@main`,
 `hermes_cli/plugins.py` sha256 `0da0ebe88da76f4a73d77fcc6942ef549154abbc573d52d74c1608bcb61efce4`
 (last touched 2026-10-25, commit `2eec2a7d24`).
 
@@ -16,7 +17,7 @@ and any plugin author can read both. It does not propose a host API change. It d
 `rule_key`; that field exists, is documented, and is already used by plugins outside this repository.
 
 What it adds is narrower: a naming grammar for one field the host leaves to the plugin, a required
-switch that two of the four plugins audited here do not have, and a minimum record shape. If a later
+switch together with a required statement of which way it points and why, and a minimum record shape. If a later
 reader finds that a section below merely restates the host, that section is a bug in this document.
 
 ## 1. The host contract, quoted
@@ -102,7 +103,7 @@ requires the author to say which grain they chose, because the user answering `[
 a different question in each case. A reader who cannot tell which question they were asked cannot
 answer it well.
 
-## 3. Rule 2 — a plugin that can return a directive MUST expose `observe` and `act`
+## 3. Rule 2 — a plugin that can return a directive MUST expose both modes, and MUST declare its default and the reason
 
 | Mode | Computes the decision | Records evidence | Returns a directive |
 |---|---|---|---|
@@ -114,15 +115,32 @@ answer it well.
   can find it from the entry they installed from.
 - `observe` MUST run the same detection path as `act`. A mode that skips the work is not an observe
   mode; it is an off switch wearing the name, and it cannot be used to calibrate anything.
-- `act` is not required to be the default. But **a plugin that acts by default MUST say so** in its
-  catalog description, in those words, because the first time a user meets the plugin is in the
-  approval prompt.
+- **There is no convention-wide default.** Each plugin MUST state, in its catalog description and its
+  README, which mode a fresh install starts in and what that choice trades away. A plugin that
+  silently inherits a default from a convention has not made the decision this rule is about.
 
-Rationale: a safety plugin that can only be tested by being bitten will be removed after its first
-false positive. Observe mode is how a user learns what the plugin considers a violation *before*
-handing it the veto, and how an author measures the false-positive rate without asking anyone to
-trust them. Of the four plugins audited here, two have no switch at all — one always acts, one has
-two modes and no third.
+The reason for the last clause: a default is a claim about which error costs more in that plugin's
+domain, and the answer is not the same in two domains. Where a false positive interrupts work that was
+going fine, starting in `observe` is right — the user should see the detector's judgment before it has
+consequences. Where a missed detection loses money or cannot be undone, starting in `act` is right —
+a user who did not read the README should not be less protected than one who did. A convention that
+picked one of those for everyone would be optimising one plugin's cost at another plugin's expense,
+and the loser would be whichever population was not consulted.
+
+The plugins audited here, with the defaults they declare:
+
+| plugin | default on a fresh install | and what that trades away |
+|---|---|---|
+| `degeneracy-guard` | `observe`; an install that has run here before keeps `act` | a false positive interrupts a working session, so a new install watches first — but an upgrade must not remove a protection already in use, which is why the mode is pinned rather than recomputed |
+| `provenance-gate` | `observe` | a flagged write is a claim about the user's intent; a wrong accusation teaches the user to dismiss the plugin, and a plugin that is dismissed protects nothing |
+| `scamgate` | `act` | a missed scam costs money that does not come back; a false positive costs one extra confirmation, so the safe default is the one that asks |
+| `skill-lineage` | none — it never returns a directive | it records and verifies; there is nothing to observe or to act on |
+
+Rationale for the mode existing at all: a safety plugin that can only be tested by being bitten will be
+removed after its first false positive. Observe mode is how a user learns what the plugin considers a
+violation *before* handing it the veto, and how an author measures the false-positive rate without
+asking anyone to trust them. Of the four plugins audited here, three expose both modes and one has no
+mode because it never acts.
 
 ## 4. Rule 3 — the record
 
@@ -169,7 +187,9 @@ For a plugin that wants to be listed as following v0.1:
 
 - [ ] every `approve` return carries `rule_key = "<plugin>:<rule>"`, from a documented finite set
 - [ ] `observe` and `act` both exist; `observe` runs the same detection and returns no directive
-- [ ] the switch is findable from the catalog description, and the description states the default mode
+- [ ] the switch is findable from the catalog description, which also states the default mode and what
+      that default trades away
+- [ ] the default was chosen for this plugin's own error costs, not inherited from this document
 - [ ] evidence rows carry `ts`, `plugin`, `rule`, `verdict`, `tool`, `session`(hash)
 - [ ] `risk` either absent, or present with a stated calibration
 - [ ] the plugin's README links to this document
@@ -184,3 +204,12 @@ For a plugin that wants to be listed as following v0.1:
   reading error a plugin author is in a position to make and a reader is not. The plugin table is
   corrected, and §2 now names the three grains in use and requires an author to say which one they
   chose. Nothing else changed; the other two rules never depended on that row.
+- **v0.1.2** (2026-10-28) — **§3 no longer prescribes a default.** v0.1.1 said a plugin should default
+  to `observe`. That reads as one rule for every plugin, and it is wrong for at least one of the four:
+  `scamgate` guards against fraud, where a missed detection costs money and a false positive costs one
+  confirmation, so its default has to act. Following the old wording would have meant weakening a
+  fraud guard to satisfy a convention written by someone else — precisely the failure this document
+  claims to be against. §3 now requires the switch, requires the author to declare the default and the
+  trade-off, and lists what the four plugins declare. No plugin release accompanies this: the
+  catalog entries already describe their modes, and the wording is being fixed before it is handed to
+  anyone.
