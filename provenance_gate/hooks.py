@@ -71,24 +71,38 @@ class Gate:
         if not checks:
             return None
         failed = [check for check in checks if not check.ok]
-        observe = verdict.mode() == verdict.MODE_OBSERVE
+        current = verdict.mode()
+        observe = current == verdict.MODE_OBSERVE
         result = None
-        if failed and not observe:
+        if failed and current == verdict.MODE_ASK:
+            # Escalate instead of refusing: the failure is a judgement call the user can make better
+            # than the plugin can. rule_key gives the approval gate a grain to record, so "always"
+            # applies to this class of finding rather than to every call from this plugin.
+            try:
+                message = verdict.ask_message(failed[0], search)
+            except Exception:
+                logger.error("provenance-gate: could not build the ask message", exc_info=True)
+                message = ("provenance-gate: this write could not be checked. Approve to write it anyway; "
+                           "deny or leave it unanswered and nothing is written.")
+            result = {"action": "approve", "message": message, "rule_key": verdict.rule_key(failed[0].reason)}
+        elif failed and not observe:
             try:
                 message = verdict.block_message(failed[0], self.blocks.bump(session_id, turn_id, failed[0].target), search)
             except Exception:
                 logger.error("provenance-gate: could not build the block message", exc_info=True)
                 message = "provenance-gate: this write could not be checked. Nothing was written."
             result = {"action": "block", "message": message}
-        self._log(directory, checks, failed, observe, tool_name, session_id)
+        self._log(directory, checks, failed, current, tool_name, session_id)
         return result
 
-    def _log(self, directory: Path | None, checks, failed, observe: bool, tool_name: str, session_id: str) -> None:
+    def _log(self, directory: Path | None, checks, failed, current: str, tool_name: str, session_id: str) -> None:
         """Append evidence rows. A failure here is logged; it never changes the verdict."""
         try:
             now = store.utc_now()
-            if failed and not observe:
+            if failed and current == verdict.MODE_BLOCK:
                 rows = [verdict.evidence_row(c, tool_name, session_id, "blocked", now) for c in failed]
+            elif failed and current == verdict.MODE_ASK:
+                rows = [verdict.evidence_row(c, tool_name, session_id, "asked", now) for c in failed]
             else:
                 rows = [verdict.evidence_row(c, tool_name, session_id, "pass" if c.ok else "would_block", now)
                         for c in checks]

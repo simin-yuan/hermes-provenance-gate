@@ -26,7 +26,7 @@ from .args import ArgError, added_texts
 from .claims import PROSE, Claim
 
 GATED_TOOLS = ("memory", "skill_manage")
-MODE_BLOCK, MODE_OBSERVE = "block", "observe"
+MODE_BLOCK, MODE_OBSERVE, MODE_ASK = "block", "observe", "ask"
 SEARCH_SESSION, SEARCH_PROFILE = "session", "profile"
 RETRY_LIMIT = 3
 CLAIM_PREVIEW = 160
@@ -47,9 +47,11 @@ _REASON_ORDER = (REASON_NEGATED, REASON_QUESTION, REASON_UNRELATED, REASON_TOO_S
 
 
 def mode() -> str:
-    """``observe`` (the default: flag and log, never refuse) or ``block`` (opt-in)."""
+    """``observe`` (the default: flag and log, never refuse), ``ask`` (escalate to the approval gate) or
+    ``block`` (refuse outright). Both actions are opt-in; nothing that runs unattended changes posture
+    on its own."""
     value = os.environ.get("PROVENANCE_GATE_MODE", "").strip().lower()
-    return MODE_BLOCK if value == MODE_BLOCK else MODE_OBSERVE
+    return value if value in (MODE_BLOCK, MODE_ASK) else MODE_OBSERVE
 
 
 def scope() -> str:
@@ -239,38 +241,66 @@ def _preview(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
-def block_message(failed: ClaimCheck, attempts: int, search: str = SEARCH_SESSION) -> str:
+def _reason_lines(failed: ClaimCheck, search: str) -> list[str]:
+    """The shared diagnosis: why this write failed, in the user's terms. No instruction, no verdict."""
     if failed.reason == REASON_UNREADABLE:
-        return (f"provenance-gate: this write could not be checked because its arguments could not be read "
-                f"({failed.quote}). Send operations as a JSON array of objects with string fields. Nothing was written.")
+        return [f"this write could not be checked because its arguments could not be read ({failed.quote}). "
+                "Send operations as a JSON array of objects with string fields."]
     if failed.reason == REASON_INTERNAL:
-        return ("provenance-gate: this write could not be checked (internal error, logged). "
-                "Nothing was written.")
+        return ["this write could not be checked (internal error, logged)."]
     claim = _preview(failed.claim.sentence, CLAIM_PREVIEW)
-    parts = [f'provenance-gate: this write states a user decision ("{claim}") without the user\'s words.']
+    lines = [f'this write states a user decision ("{claim}") without the user\'s words.']
     if failed.reason == REASON_NOT_FOUND:
         where = " in this session" if search == SEARCH_SESSION else ""
-        parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") are not in anything the user typed'
+        lines.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") are not in anything the user typed'
                      f"{where}.")
     elif failed.reason == REASON_TOO_SHORT:
-        parts.append(f'The quote ("{_preview(failed.quote or "", 80)}") is shorter than '
+        lines.append(f'The quote ("{_preview(failed.quote or "", 80)}") is shorter than '
                      f"{quotes.SHORT_QUOTE_LIMIT} words and is not one of the user's last "
                      f"{RECENT_FOR_SHORT_QUOTES} messages in full.")
     elif failed.reason == REASON_NEGATED:
-        parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") follow a negation in what the user '
+        lines.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") follow a negation in what the user '
                      "typed (for example \"never …\" or \"don't …\"), so they do not back the decision.")
     elif failed.reason == REASON_QUESTION:
-        parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") come from a question the user asked, '
+        lines.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") come from a question the user asked, '
                      "so they do not back the decision.")
     elif failed.reason == REASON_UNRELATED:
-        parts.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") do not share key words with '
+        lines.append(f'The quoted words ("{_preview(failed.quote or "", 80)}") do not share key words with '
                      "the decision.")
     elif failed.reason == REASON_TOO_MANY:
-        parts.append(f"The write states more than {MAX_CLAIMS_PER_CALL} user decisions; split it.")
+        lines.append(f"The write states more than {MAX_CLAIMS_PER_CALL} user decisions; split it.")
+    return lines
+
+
+def rule_key(reason: str | None) -> str:
+    """The ``[a]lways`` allowlist grain this plugin asks for: one key per failure reason.
+
+    Grammar: ``<plugin>:<rule>`` — see docs/verdict-convention.md. Per reason, not per claim: a user who
+    answers "always" to one unsourced decision has agreed to that class of finding, not to the text of
+    one memory write.
+    """
+    return f"provenance-gate:{reason or REASON_INTERNAL}"
+
+
+def block_message(failed: ClaimCheck, attempts: int, search: str = SEARCH_SESSION) -> str:
+    if failed.reason in (REASON_UNREADABLE, REASON_INTERNAL):
+        # Nothing about the claim to explain: the check never ran. Keep it to one sentence plus the
+        # fact that nothing was written.
+        return "provenance-gate: " + " ".join(_reason_lines(failed, search)) + " Nothing was written."
+    parts = ["provenance-gate:"] + _reason_lines(failed, search)
     parts.append('Quote the user\'s exact words in "..." if they said it, or write it as your own '
                  "suggestion or as an open question. Nothing was written.")
     if attempts >= RETRY_LIMIT:
         parts.append("Stop retrying this write; ask the user instead.")
+    return " ".join(parts)
+
+
+def ask_message(failed: ClaimCheck, search: str = SEARCH_SESSION) -> str:
+    """The ``ask`` mode message. Shown in the approval prompt, so it states the finding and the choice,
+    and never claims something was written or refused — at this point neither has happened yet."""
+    parts = ["provenance-gate:"] + _reason_lines(failed, search)
+    parts.append("Approve to write it anyway. Deny, or leave it unanswered, and nothing is written. "
+                 'Choose "always" to stop asking about this kind of finding.')
     return " ".join(parts)
 
 

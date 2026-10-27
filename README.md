@@ -9,6 +9,9 @@ Flags memory and skill writes that claim a user decision the user's own words do
 - Each such sentence needs a quote in "…" that appears verbatim in text the user typed in this session, shares key words with the decision and does not drop a negation.
 - **By default (`observe`) nothing is refused:** a write without such a quote goes through and is recorded as `would_block`. `hermes provenance-gate report` lists them.
 - **In `block` mode** (`PROVENANCE_GATE_MODE=block`) the write is refused and the model is told how to fix it. Nothing is written, and no human approval is involved.
+- **In `ask` mode** (`PROVENANCE_GATE_MODE=ask`) the write is escalated to Hermes' human-approval gate instead of being refused, with `rule_key` = `provenance-gate:<reason>`. Approve to write it anyway; deny or leave it unanswered and nothing is written. The key is per failure class, so answering "always" stops the prompts for that class of finding and not for every write from this plugin.
+
+This plugin follows the [Hermes plugin verdict convention v0.1](docs/verdict-convention.md) — `rule_key` grammar, observe/act switch, evidence row — alongside `degeneracy-guard` and `skill-lineage`.
 
 Why observe is the default: the claim detector is a keyword tripwire. It misses wordings outside its patterns and flags some ordinary text (see [Measured accuracy](#measured-accuracy)). Recording is safe to leave on; refusing writes is a choice to make once you have seen what it flags on your own data.
 
@@ -102,7 +105,7 @@ These are environment variables, for example in `~/.hermes/.env`:
 
 | Variable | Values | Default |
 |---|---|---|
-| `PROVENANCE_GATE_MODE` | `observe`: never refuse, log `would_block`. `block`: refuse the write. | `observe` |
+| `PROVENANCE_GATE_MODE` | `observe`: never refuse, log `would_block`. `ask`: escalate to the approval gate with a `rule_key`. `block`: refuse the write. | `observe` |
 | `PROVENANCE_GATE_SEARCH` | `session`: quotes must come from this session. `profile`: if not found in this session, every retained message in the profile is searched too. | `session` |
 | `PROVENANCE_GATE_SCOPE` | `decisions`, or `decisions+preferences` to also require quotes for "prefers / likes / 喜欢 / 偏好 …" | `decisions` |
 | `PROVENANCE_GATE_RETENTION_DAYS` | Days of stored user text and evidence rows to keep | `30` |

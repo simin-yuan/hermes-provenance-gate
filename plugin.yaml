@@ -1,16 +1,19 @@
 name: provenance-gate
-version: 0.1.3
+version: 0.1.4
 author: "Simin Yuan"
 requires_hermes: ">=0.22.2"
 description: >-
   Flags memory and skill_manage writes that state a user decision ("the user decided ...", "用户决定 ...")
   without a quote that appears verbatim in text the user typed in this session, shares key words with
-  the decision and does not drop a negation; observe mode (the default) records them as would_block,
-  block mode refuses them with instructions.
+  the decision and does not drop a negation. Three modes — observe (the default: records them as
+  would_block and never refuses), ask (escalates to the human-approval gate with a rule_key
+  provenance-gate:<reason>, so "always" applies to one class of finding rather than to every write) and
+  block (refuses them with instructions). Follows the Hermes plugin verdict convention v0.1
+  (docs/verdict-convention.md) and emits no directive at all in observe mode.
   Disclosure — keeps a local copy of the text of user messages with their sender_id and session link
   (30-day default retention, `hermes provenance-gate purge`) and an evidence log under
   plugin-data/provenance-gate; reads MEMORY.md / USER.md and skill files to check what a patch produces;
-  no network; never asks for approval.
+  no network; does not act unless PROVENANCE_GATE_MODE is set to ask or block.
 provides_hooks:
   - pre_llm_call
   - pre_tool_call

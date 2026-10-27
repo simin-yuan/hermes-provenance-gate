@@ -247,6 +247,69 @@ def test_observe_mode_never_blocks(gate, tmp_path, monkeypatch):
     assert gate.pre_tool_call(tool_name="memory", args={"operations": "[{bad"}, session_id="s1") is None
 
 
+def test_ask_mode_escalates_with_a_rule_key(gate, tmp_path, monkeypatch):
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "ask")
+    say(gate, "s1", DECIDE)
+    result = write(gate, "User decided to ship on Friday.")
+    assert result["action"] == "approve"
+    assert result["rule_key"] == "provenance-gate:no_quote"
+    assert "Approve to write it anyway" in result["message"]
+    # The approval prompt is shown before anything happens: it must not claim the write was refused.
+    assert "Nothing was written." not in result["message"]
+    assert evidence(tmp_path)[0]["verdict"] == "asked"
+
+
+def test_ask_mode_rule_key_grain_is_the_reason(gate, tmp_path, monkeypatch):
+    """A user answering "always" agrees to one class of finding, not to every call from this plugin."""
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "ask")
+    say(gate, "s1", DECIDE)
+    same = write(gate, "User decided to ship on Friday.")
+    different = write(gate, 'User decided to ship on Friday ("ship")')  # quote too short: other reason
+    assert same["rule_key"] == "provenance-gate:no_quote"
+    assert different["rule_key"] == "provenance-gate:quote_too_short"
+    assert same["rule_key"] != different["rule_key"]
+
+
+def test_ask_mode_passes_a_sourced_claim(gate, tmp_path, monkeypatch):
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "ask")
+    say(gate, "s1", DECIDE)
+    assert write(gate, f'User decided to ship on Friday ("{DECIDE}")') is None
+    assert evidence(tmp_path)[0]["verdict"] == "pass"
+
+
+def test_ask_mode_escalates_a_write_it_could_not_check(gate, tmp_path, monkeypatch):
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "ask")
+    result = gate.pre_tool_call(tool_name="memory", args={"operations": "[{bad"}, session_id="s1", turn_id="t1")
+    assert result["action"] == "approve"
+    assert result["rule_key"] == "provenance-gate:unreadable_arguments"
+
+
+def test_ask_message_says_the_same_thing_as_the_block_message(gate, tmp_path, monkeypatch):
+    """The diagnosis must not drift between modes: only the instruction differs."""
+    say(gate, "s1", DECIDE)
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "ask")
+    asked = write(gate, "User decided to ship on Friday.")
+    monkeypatch.setenv("PROVENANCE_GATE_MODE", "block")
+    blocked = write(gate, "User decided to ship on Friday.")
+    shared = "this write states a user decision"
+    assert shared in asked["message"] and shared in blocked["message"]
+    assert "Nothing was written." in blocked["message"]
+
+
+def test_mode_parsing(monkeypatch):
+    for value, expected in (("", "observe"), ("ask", "ask"), ("ASK ", "ask"), ("block", "block"),
+                            ("nonsense", "observe"), ("act", "observe")):
+        monkeypatch.setenv("PROVENANCE_GATE_MODE", value)
+        assert verdict.mode() == expected, value
+
+
+def test_rule_key_grammar_is_plugin_colon_rule():
+    key = verdict.rule_key("no_quote")
+    assert key == "provenance-gate:no_quote"
+    assert key.count(":") == 1 and " " not in key
+    assert verdict.rule_key(None).split(":", 1)[1] == "internal_error"
+
+
 def test_non_claim_write_passes_without_evidence(gate, tmp_path):
     for content in ("User prefers dark mode.", "Project uses uv and Python 3.14.", "The build confirmed the fix."):
         assert write(gate, content) is None
