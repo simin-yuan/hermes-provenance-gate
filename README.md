@@ -11,7 +11,7 @@ Flags memory and skill writes that claim a user decision the user's own words do
 - **In `block` mode** (`PROVENANCE_GATE_MODE=block`) the write is refused and the model is told how to fix it. Nothing is written, and no human approval is involved.
 - **In `ask` mode** (`PROVENANCE_GATE_MODE=ask`) the write is escalated to Hermes' human-approval gate instead of being refused, with `rule_key` = `provenance-gate:<reason>`. Approve to write it anyway; deny or leave it unanswered and nothing is written. The key is per failure class, so answering "always" stops the prompts for that class of finding and not for every write from this plugin.
 
-This plugin follows the [Hermes plugin verdict convention v0.1](docs/verdict-convention.md) — `rule_key` grammar, observe/act switch, evidence row — alongside `degeneracy-guard` and `skill-lineage`.
+This plugin follows the [Hermes plugin verdict convention v0.1.1](docs/verdict-convention.md) — `rule_key` grammar, observe/act switch, evidence row — alongside `degeneracy-guard` and `skill-lineage`.
 
 Why observe is the default: the claim detector is a keyword tripwire. It misses wordings outside its patterns and flags some ordinary text (see [Measured accuracy](#measured-accuracy)). Recording is safe to leave on; refusing writes is a choice to make once you have seen what it flags on your own data.
 

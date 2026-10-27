@@ -1,9 +1,9 @@
-# Hermes plugin verdict convention — v0.1
+# Hermes plugin verdict convention — v0.1.1
 
 For plugins that answer `pre_tool_call`. Three rules: how to name a `rule_key`, how to expose an
 observe/act switch, and what to record. Nothing here needs a change in Hermes.
 
-**Status:** published 2026-10-27. Written against `NousResearch/hermes-agent@main`,
+**Status:** v0.1 published 2026-10-27; v0.1.1 same day corrects one row of the plugin table (see Changelog). Written against `NousResearch/hermes-agent@main`,
 `hermes_cli/plugins.py` sha256 `0da0ebe88da76f4a73d77fcc6942ef549154abbc573d52d74c1608bcb61efce4`
 (last touched 2026-10-25, commit `2eec2a7d24`).
 
@@ -62,6 +62,10 @@ the prompts, and every tap writes an allowlist entry that will never match again
 calls it "dead entries". Once grain control lands, the workaround stops being needed; a grammar makes
 the entries legible in the meantime.
 
+A hash of the triggering content is **not** the same thing as a nonce, and this document does not
+forbid it: it is reproducible for the same input, which is what makes an allowlist entry checkable at
+all. What the clause forbids is a key that changes while nothing about the finding changes.
+
 **Why per class, not per instance.** `[a]lways` means "stop telling me about this". A user who
 answers it to a memory write with no source is not agreeing to every future memory write, and a key
 derived from the text of one write cannot express the difference. Per class is the narrowest grain
@@ -75,10 +79,28 @@ cannot audit.
 
 | Plugin | Emits `rule_key` | Value |
 |---|---|---|
-| `degeneracy-guard` 1.3.0 | yes | `degeneracy-guard:<tool_name>` — per tool |
+| `degeneracy-guard` 1.4.0 | yes | `degeneracy-guard:<tool>` — per tool |
 | `provenance-gate` 0.1.4 | yes (new) | `provenance-gate:<reason>` — per failure class |
+| `scamgate` 0.3.3 | yes | `scamgate:<class>[:<sub>]:<hash10>` — seven shapes, suffix is a sha256 of the content that triggered the finding |
 | `skill-lineage` 0.1.9 | n/a | never returns a directive; nothing to key |
-| `scamgate` 0.3.3 | **no** | escalates with `message` only — an `ask` from it can only be answered with the blanket `always` |
+
+### Three grains are in use, and the choice is visible
+
+| Grain | Who | What one `[a]lways` covers |
+|---|---|---|
+| per tool | `degeneracy-guard` | every future loop-shaped call to that one tool |
+| per failure class | `provenance-gate` | every future finding of that class, whatever the text |
+| per triggering content | `scamgate` | a repeat of the same content; a different link, payee or payload asks again |
+
+`scamgate` is deliberate about the third, in a comment in its own source: `one "always" never covers
+other links`. That is the right grain for a destination-based finding — an allowlist entry for one
+host should not silently cover the next host. It is a poor grain for a class-based finding, where it
+produces an entry reachable only by an identical repeat.
+
+The convention does not pick a winner. It requires the **prefix** to be stable and documented, and
+requires the author to say which grain they chose, because the user answering `[a]lways` is being asked
+a different question in each case. A reader who cannot tell which question they were asked cannot
+answer it well.
 
 ## 3. Rule 2 — a plugin that can return a directive MUST expose `observe` and `act`
 
@@ -155,3 +177,10 @@ For a plugin that wants to be listed as following v0.1:
 ## Changelog
 
 - **v0.1** (2026-10-27) — first version. Three rules, four audited plugins, four open upstream items.
+- **v0.1.1** (2026-10-27) — **correction.** v0.1 stated that `scamgate` emits no `rule_key`. It does:
+  every one of its seven `approve` paths carries `scamgate:<class>[:<sub>]:<hash10>`, and the
+  destination-scoped grain is deliberate (commented in its source). The claim came from reading the
+  rendered hook output instead of the `Result` construction sites, which is exactly the kind of
+  reading error a plugin author is in a position to make and a reader is not. The plugin table is
+  corrected, and §2 now names the three grains in use and requires an author to say which one they
+  chose. Nothing else changed; the other two rules never depended on that row.

@@ -1,5 +1,5 @@
 name: provenance-gate
-version: 0.1.4
+version: 0.1.5
 author: "Simin Yuan"
 requires_hermes: ">=0.22.2"
 description: >-
@@ -8,8 +8,8 @@ description: >-
   the decision and does not drop a negation. Three modes — observe (the default: records them as
   would_block and never refuses), ask (escalates to the human-approval gate with a rule_key
   provenance-gate:<reason>, so "always" applies to one class of finding rather than to every write) and
-  block (refuses them with instructions). Follows the Hermes plugin verdict convention v0.1
-  (docs/verdict-convention.md) and emits no directive at all in observe mode.
+  block (refuses them with instructions). Follows the Hermes plugin verdict convention v0.1.1
+  (docs/verdict-convention.md, v0.1.1) and emits no directive at all in observe mode.
   Disclosure — keeps a local copy of the text of user messages with their sender_id and session link
   (30-day default retention, `hermes provenance-gate purge`) and an evidence log under
   plugin-data/provenance-gate; reads MEMORY.md / USER.md and skill files to check what a patch produces;
