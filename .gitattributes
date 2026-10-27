@@ -3,3 +3,7 @@
 # Anchored bodies and proofs are byte artifacts, not text: never convert line endings.
 self_anchor/**/body.txt -text
 self_anchor/**/*.ots -text
+
+# the bytes a timestamp proof covers must not be rewritten by a checkout
+*.ots -text
+docs/anchor/body.txt -text
