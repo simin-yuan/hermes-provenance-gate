@@ -8,3 +8,4 @@ self_anchor/**/*.ots -text
 *.ots -text
 docs/anchor/body.txt -text
 docs/anchor-v2/body.txt -text
+docs/anchor-v3/body.txt -text
