@@ -7,3 +7,4 @@ self_anchor/**/*.ots -text
 # the bytes a timestamp proof covers must not be rewritten by a checkout
 *.ots -text
 docs/anchor/body.txt -text
+docs/anchor-v2/body.txt -text

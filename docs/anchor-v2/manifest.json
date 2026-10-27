@@ -1,0 +1,12 @@
+{
+ "hash_rule": "sha256 over the exact UTF-8 bytes of the published body; no normalization, no stripping, no line-ending conversion",
+ "algo": "sha256",
+ "digest": "2c5ecd744e62b31859a4de67ead28bfdf99ff763bcf76ac4bc15dd216762c3be",
+ "bytes": 2897,
+ "platform": "github-convention-v2",
+ "ref": "verdict-convention-v0.1.1",
+ "source_file": "docs\\verdict-convention-manifest.md",
+ "created_at_utc": "2026-10-27T15:41:09+00:00",
+ "mode": "public",
+ "body_published": true
+}
