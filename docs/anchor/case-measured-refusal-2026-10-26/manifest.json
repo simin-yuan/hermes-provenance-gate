@@ -1,0 +1,12 @@
+{
+ "hash_rule": "sha256 over the exact UTF-8 bytes of the published body; no normalization, no stripping, no line-ending conversion",
+ "algo": "sha256",
+ "digest": "dea6cd15cc6a2b00405095029ae9e2e60188ffe2dbc28a74f607792d461bf647",
+ "bytes": 1065,
+ "platform": "github",
+ "ref": "e775552",
+ "source_file": "docs\\anchor\\case-measured-refusal-2026-10-26\\body.txt",
+ "created_at_utc": "2026-10-28T12:31:09+00:00",
+ "mode": "public",
+ "body_published": true
+}
