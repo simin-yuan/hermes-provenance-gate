@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+
+# ots-cli 升级时留下的升级前副本，git 里已有旧版本，不必入库
+*.ots.bak
