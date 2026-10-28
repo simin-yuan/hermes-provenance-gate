@@ -218,11 +218,11 @@ The part worth copying is the check afterwards, not the story: events for that d
 
 The refusal was correct and invisible: that path returned before any write and wrote no log line either. A week later the only evidence would have been an unchanged event count, which cannot distinguish *the gate said no* from *nothing was submitted*. The other rejection path in the same system already appends a JSON line to a rejection log — the asymmetry was the finding.
 
-The fix is one logging call before the `return`, with the allow/deny decision untouched: commit `345bd6674bc1`, one file, seven insertions. Verified by running the reproduction twice — the temporary log goes 0 → 1 line, the production log 3 → 4. The fourth production line is the verification run, not the original incident; the incident predates the line, which is precisely the gap.
+The fix is one logging call before the `return`, with the allow/deny decision untouched: seven inserted lines. Because the repository that actually runs this gate is private, the diff and the reproduction are copied into [`case/2026-10-26-silent-refusal/`](case/2026-10-26-silent-refusal/) in this repository (commit `dd18e24`) rather than cited as a hash a reader cannot open. Verified by running the published script twice: the temporary log goes 0 → 1 line, a real rejection log 3 → 4. The fourth line there is the verification run, not the original incident; the incident predates the line, which is precisely the gap.
 
 Two habits came out of it, both cheap:
 
-- **Reproduce the refusal without a credential.** A throwaway database, a registered writer, a ticket scoped to the patch, the runtime markers removed: the same `MISSING_RUNTIME_SESSION_ID` comes back, the log grows by one line, and the counters show nothing was written. The same submit without the ticket is refused outright with `FORBIDDEN_OP`.
+- **Reproduce the refusal without a credential.** A throwaway database, a registered writer, a ticket scoped to the patch, the runtime markers removed: the same `MISSING_RUNTIME_SESSION_ID` comes back, the log grows by one line, and the counters show nothing was written. The submit without the ticket is refused outright with `FORBIDDEN_OP`. Run it with [`case/2026-10-26-silent-refusal/refuse_without_runtime_session.py`](case/2026-10-26-silent-refusal/refuse_without_runtime_session.py).
 - **After editing an identity file, start a new process and ask.** What are you called, what am I called, how do you sign? A change only the current process believes in is not a change.
 
 The general question is the one this plugin exists to make answerable: not "did it block?" but "what would I read, in a week, without trusting the agent's account of itself?"
