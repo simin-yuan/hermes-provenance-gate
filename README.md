@@ -349,6 +349,10 @@ bytes were first anchored and a second run is not a second anchoring.
 
 `verify_self_anchor.js` checks four things and prints each: `sha256(body.txt)` equals the manifest digest; the same digest is the one inside `body.txt.ots`; every Bitcoin attestation's op chain terminal value equals the `merkle_root` of the block header it names; and the rebuilt 80-byte header hashes to the block hash the chain reports.
 
+Neither script vendors `ots-cli.js`. Both look for it in the same two places: `OTS_JS`, which takes the `javascript-opentimestamps` package directory or the `ots-cli.js` file itself, and failing that Node's own module resolution (`npm install javascript-opentimestamps` where Node can see it). Neither is satisfied, the run stops and tells you to set `OTS_JS`. Nothing machine-specific is baked in: until 0.1.7 stamping carried a single absolute path on the author's disk, so on any other machine it could not produce a proof and the message named a path that could not be changed.
+
+A stamp is `pending` until a Bitcoin block confirms it. Re-run `node ots-cli.js upgrade body.txt.ots` after a few hours and then the verifier; the `PendingAttestation` disappears and a `BitcoinBlockHeaderAttestation(<height>)` appears. If a script of your own does that on a schedule, have it say something when **every** proof fails to verify — otherwise "nothing to report" and "the verifier never opened the file" print the same nothing.
+
 First case, `self_anchor/2026-10-25_x_2114253846482665752` — the [council-numbers post](https://x.com/yleven120/status/2114253846482665752), 298 bytes:
 
 ```

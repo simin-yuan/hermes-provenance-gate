@@ -19,8 +19,25 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-const otsPath = process.env.OTS_JS || 'C:/Users/Simon/node_modules/javascript-opentimestamps';
-const ots = require(otsPath);
+const otsPath = (() => {
+  const fromEnv = process.env.OTS_JS;
+  if (fromEnv) return fromEnv;
+  try {
+    return path.dirname(require.resolve('javascript-opentimestamps/package.json'));
+  } catch (e) {
+    console.error('javascript-opentimestamps not found: set OTS_JS to the package directory (or its ots-cli.js),');
+    console.error('or install it where Node can resolve it (npm install javascript-opentimestamps).');
+    process.exit(2);
+  }
+})();
+let ots;
+try {
+  ots = require(otsPath);
+} catch (e) {
+  console.error(`javascript-opentimestamps not found at ${otsPath}`);
+  console.error('Set OTS_JS to the package directory, or to its ots-cli entry (npm install javascript-opentimestamps).');
+  process.exit(2);
+}
 const { DetachedTimestampFile } = ots;
 
 const dir = process.argv[2];

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.7 — 2026-10-28
+
+**Changed: both scripts look for `ots-cli.js` the same way — `OTS_JS`, else Node's module resolution.**
+
+**Removed a hardcoded developer path** from `self_anchor.py` and `verify_self_anchor.js`. Lookup order
+is now: `OTS_JS` (the package directory, or the `ots-cli.js` file itself), then `require.resolve` for
+`javascript-opentimestamps`, then a stop that says to set `OTS_JS`. The package is still not vendored.
+
+What this means for a user of 0.1.6: stamping on a machine without the package at that path stops
+before writing anything, with an error naming a directory you cannot change. Upgrade, run
+`npm install javascript-opentimestamps` where Node can see it or set `OTS_JS`, and stamping works
+anywhere. Verifying on such a machine stops with one actionable line (exit 2) instead of a Node
+module-not-found stack trace.
+
+Also documented, because it bit this project: a scheduled upgrade loop must report when *every* proof
+fails to verify. A loop that only speaks on confirmation cannot tell "still pending" from "the
+verifier never opened the file", and both print the same silence.
+
 ## 0.1.6 — 2026-10-28
 
 **Fixed: `self_anchor` could overwrite the bytes an existing timestamp proof covers.**

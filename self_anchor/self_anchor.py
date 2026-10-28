@@ -33,6 +33,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -40,7 +41,35 @@ import sys
 
 ROOT = pathlib.Path.home() / "shiqing-state" / "self_anchor"
 PRIVATE_ROOT = pathlib.Path.home() / "shiqing-state" / "priority"
-OTS_CLI = r"C:/Users/Simon/node_modules/javascript-opentimestamps/ots-cli.js"
+
+
+def resolve_ots_cli() -> pathlib.Path:
+    """Where ots-cli.js is: $OTS_JS, else Node's own module lookup, else a hard stop.
+
+    ``verify_self_anchor.js`` reads ``OTS_JS`` the same way. ``OTS_JS`` may point at the package
+    directory or at the cli file itself; without it, ``require.resolve`` finds the package wherever
+    ``npm install javascript-opentimestamps`` put it. There is deliberately no fallback path: a
+    hardcoded developer path only works on the machine it was written on, and it leaks that path to
+    everyone who installs the plugin.
+    """
+    env = os.environ.get("OTS_JS")
+    if env:
+        p = pathlib.Path(env).expanduser()
+        return p if p.suffix.lower() == ".js" else p / "ots-cli.js"
+    try:
+        found = subprocess.run(
+            ["node", "-e",
+             "process.stdout.write(require.resolve('javascript-opentimestamps/package.json'))"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        found = None
+    if found is not None and found.returncode == 0 and found.stdout.strip():
+        return pathlib.Path(found.stdout.strip()).parent / "ots-cli.js"
+    raise SystemExit(
+        "ots-cli.js not found: set OTS_JS to the javascript-opentimestamps package directory (or "
+        "its ots-cli.js), or install the package where Node can resolve it "
+        "(npm install javascript-opentimestamps)")
 RULE = ("sha256 over the exact UTF-8 bytes of the published body; "
         "no normalization, no stripping, no line-ending conversion")
 
@@ -148,10 +177,13 @@ def build(src: pathlib.Path, out: pathlib.Path, platform: str, ref: str,
 
 def stamp(directory: pathlib.Path) -> None:
     body = directory / "body.txt"
-    if not OTS_CLI or not pathlib.Path(OTS_CLI).exists():
-        raise SystemExit(f"ots-cli not found at {OTS_CLI}")
+    cli = resolve_ots_cli()
+    if not cli.exists():
+        raise SystemExit(
+            f"ots-cli not found at {cli} — set OTS_JS to the javascript-opentimestamps package "
+            "directory or to its ots-cli.js (npm install javascript-opentimestamps)")
     out = subprocess.run(
-        ["node", OTS_CLI, "stamp", str(body)],
+        ["node", str(cli), "stamp", str(body)],
         capture_output=True, text=True, timeout=180,
     )
     sys.stdout.write(out.stdout)

@@ -58,3 +58,31 @@ def test_same_bytes_is_idempotent(tmp_path):
     assert (out / "body.txt").read_bytes() == src.read_bytes()
     assert json.loads((out / "manifest.json").read_text(encoding="utf-8")) == manifest_before, \
         "a repeat run must not restate when these bytes were anchored"
+
+
+def test_ots_js_env_points_stamping_at_any_install(tmp_path, monkeypatch):
+    """Stamping used to hardcode one machine's ots-cli path, so nobody else could produce a proof."""
+    pkg = tmp_path / "javascript-opentimestamps"
+    pkg.mkdir()
+    monkeypatch.setenv("OTS_JS", str(pkg))
+    assert sa.resolve_ots_cli() == pkg / "ots-cli.js", "a package directory must resolve to its cli"
+
+    cli = tmp_path / "elsewhere" / "ots-cli.js"
+    monkeypatch.setenv("OTS_JS", str(cli))
+    assert sa.resolve_ots_cli() == cli, "a direct path to ots-cli.js must be used as given"
+
+
+def test_without_ots_js_or_a_resolvable_package_it_stops_and_says_so(tmp_path, monkeypatch):
+    """No env var and nothing for Node to resolve: a stop, never a guess at some directory."""
+    monkeypatch.delenv("OTS_JS", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
+
+    out = tmp_path / "anchor"
+    out.mkdir()
+    (out / "body.txt").write_bytes(b"a body that must not end up with a bogus proof\n")
+
+    with pytest.raises(SystemExit) as exc:
+        sa.stamp(out)
+
+    assert "OTS_JS" in str(exc.value), "the error must say how to point at ots-cli"
+    assert not (out / "body.txt.ots").exists(), "a failed stamp must not leave a proof file behind"
