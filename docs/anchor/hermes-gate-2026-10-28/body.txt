@@ -1,0 +1,16 @@
+hermes-gate-2026-10-28 - frozen state of the evidence directory referenced by
+https://github.com/NousResearch/hermes-agent/issues/131859#issuecomment-6451458283
+
+repository: https://github.com/simin-yuan/upstream-contributions
+commit:     f7200d3
+comment published (UTC): 2026-10-27T19:24:26Z
+
+The bytes below are what a reader of that link saw at publication time.
+Nothing after the comment was published is included.
+
+sha256                                                            bytes  path
+356b938ca7dc17ab4815ab5051dbeb571278f7a764c1553e2e4a9c60052228e8   2109  hermes-gate-2026-10-28/README.md
+657ce104a4bfa4c0110ba5d31a21c13ffccf9014fc415832d355c5efdd4c425c    877  hermes-gate-2026-10-28/comment-131859.md
+d00c2bba7d93a35cd570d450939e00a8d76713ed8dfb19e894911d15d57a6473   1842  hermes-gate-2026-10-28/probe-2026-10-28.log
+ce046949f4970c026aa9d2e9e5e1d31f15ad3c63feeba917259f77313ff33769    562  hermes-gate-2026-10-28/probe-log.jsonl
+c7cf7c655fb6a4bd0872f1f4d5d5f2e75267302c28c082ed2e21f86a7f933b70   1868  hermes-gate-2026-10-28/probe.sh

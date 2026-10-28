@@ -1,0 +1,12 @@
+{
+ "hash_rule": "sha256 over the exact UTF-8 bytes of the published body; no normalization, no stripping, no line-ending conversion",
+ "algo": "sha256",
+ "digest": "d02d5eeed1c899923cb9c5d878c6b8716f405deb0c850c19b589da699694c960",
+ "bytes": 1052,
+ "platform": "github",
+ "ref": "issue-131859-comment-6451458283",
+ "source_file": "docs\\anchor\\hermes-gate-2026-10-28\\body.txt",
+ "created_at_utc": "2026-10-28T05:51:09+00:00",
+ "mode": "public",
+ "body_published": true
+}
