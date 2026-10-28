@@ -1,0 +1,18 @@
+case-measured-refusal-2026-10-26 - frozen state of the case directory for the refusal
+that the gate performed and did not record.
+
+repository: https://github.com/simin-yuan/hermes-provenance-gate
+commit:     e775552
+directory:  case/2026-10-26-silent-refusal/
+
+The bytes below are what a reader of that commit sees. They are the artefacts the
+case rests on: the one-line diff against the private core, the credential-free
+reproduction, and the write-up of what happened on 2026-10-26.
+
+Stamped after the branch was pushed, so this proves the bytes from the stamp
+onward - not that they existed before publication.
+
+sha256                                                            bytes  path
+0913f3d61fb4405aadc79613f6f6fdbc07b0d99bbfa98feb6d4afcce02d6c6a2    1822  case/2026-10-26-silent-refusal/log-fix.diff
+50e172e28ffba826b07f19c4700bfd2dd6f43f30e5f175ada49dbdef66060ef4    4111  case/2026-10-26-silent-refusal/README.md
+d3d19498f010d3631120e6f54b1667077bf0692042577cc2e50030fc201b4ac7    7276  case/2026-10-26-silent-refusal/refuse_without_runtime_session.py
