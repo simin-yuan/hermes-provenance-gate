@@ -1,0 +1,28 @@
+# The fix, as applied. One branch, seven inserted lines, no change to any
+# allow/deny condition. Hunk kept verbatim from the commit that shipped it
+# (the repository that runs this gate is private and is not linked here; the
+# reproducible behaviour is what matters, and the script next to this file
+# reproduces it without any credential).
+#
+# Apply to your own copy of the gate module, then run
+#   python refuse_without_runtime_session.py
+# and watch the rejection log grow by exactly one line.
+
+diff --git a/scripts/continuity_core.py b/scripts/continuity_core.py
+index 16c02bf7..37f5d4bb 100644
+--- a/scripts/continuity_core.py
++++ b/scripts/continuity_core.py
+@@ -957,6 +957,13 @@ def submit_event(writer_id, doc_key, patch, base_revision=None, event_type='PATC
+             # 人工终端通道: session_id 即审计 attestation (manual_tty:<host>:<pid>:<时刻>), 可查询可追溯
+             session_id = _manual_tty
+         elif not _sid:
++            # 2026-10-26 Simin 令（E1 缺口）：这条拒绝以前不留任何痕迹 —— 拒了但没日志，
++            # 离「静默失败」只差一次重启。只加一行日志，放行/拒绝判定一个字节没动。
++            _log_submit_reject({'ts': now_iso(), 'writer_id': writer_id, 'doc_key': doc_key,
++                                'event_type': event_type, 'error': 'MISSING_RUNTIME_SESSION_ID',
++                                'detail': 'runtime_session_id() 为空（三个运行时标记皆空）；'
++                                          '未落事件、未消耗凭证。',
++                                'verdict': 'REJECTED'})
+             conn.close()
+             return {'ok': False, 'error': 'MISSING_RUNTIME_SESSION_ID',
+                     'detail': '带票据的事件必须带运行时注入的 session_id：'
