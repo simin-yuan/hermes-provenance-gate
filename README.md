@@ -202,6 +202,31 @@ hermes provenance-gate purge (--older-than DAYS | --all)
 - **Role and condition (recorded, not judged).** Each row also stores two fields read from the quote itself: `role` (`self` / `relayed` / `unknown`) and `condition` (`none` / `unresolved` / `unknown`). Both describe what the quote *was*, never what it meant for the verdict — `"Alice decided we're using Postgres"` verifies as a quote, and the row records that it was relayed so a later version does not have to reconstruct the fact from text that no longer exists. `unresolved` means a condition marker is present (`only if`, `unless`, `as long as`); it does **not** mean the condition is unmet, because nothing here can see whether it was later satisfied. Ambiguous cases stay `unknown` rather than being forced to a side: `"Alice suggested X and I agree"` carries both a report and the user's own agreement, and a wrong `relayed` would suppress the user's decision. Neither field changes a verdict today. `tests/corpus/attribution.jsonl` holds the adversarial cases this is for.
 - **Agents that are not the user.** The curator fork (`platform="curator"`, `agent/curator.py:1119`), `delegate_task` children (`platform="subagent"`, `tools/delegate_tool.py:282`) and cron runs (`platform="cron"`, `cron/scheduler.py:2524`) fire `pre_llm_call` with text the user did not type. None of it is captured. Writes from those agents are still checked.
 
+## A real case: the agent tried to edit its own identity file
+
+This plugin is not that gate, and this section is not a claim about what `provenance-gate` does. It is a measured record from the same machine, kept here because it is the clearest example we have of the thing this plugin also depends on: **a refusal that can be read back afterwards.**
+
+The setting is an agent that keeps a persistent identity file — the paragraph that states its own name, the name it uses for the person it works with, and how it signs outgoing work. The file is injected on every turn, so editing it changes what the agent says about itself.
+
+While doing maintenance, the agent wanted to know which arguments a helper script accepted, and ran it with `--help`. The script had no argument parser: `--help` was ignored and the normal path ran — read the current revision, append a section, write.
+
+The write did not happen. The submit path returned `MISSING_RUNTIME_SESSION_ID` and stopped before the transaction that appends an event. Three conditions sit on that path, each on a different axis: the writer must be registered; a rewriting edit needs a single-use ticket minted from a human-typed secret in a terminal carrying no agent environment variables, scoped to the exact patch hash; and the submitting process must carry a runtime session identifier injected by the host, never accepted as a function argument.
+
+The part worth copying is the check afterwards, not the story: events for that document 15 before and 15 after, latest timestamp unchanged, revision unchanged, unused tickets zero. One probe is not a rate.
+
+### The gap it exposed, and the one-line fix
+
+The refusal was correct and invisible: that path returned before any write and wrote no log line either. A week later the only evidence would have been an unchanged event count, which cannot distinguish *the gate said no* from *nothing was submitted*. The other rejection path in the same system already appends a JSON line to a rejection log — the asymmetry was the finding.
+
+The fix is one logging call before the `return`, with the allow/deny decision untouched: commit `345bd6674bc1`, one file, seven insertions. Verified by running the reproduction twice — the temporary log goes 0 → 1 line, the production log 3 → 4. The fourth production line is the verification run, not the original incident; the incident predates the line, which is precisely the gap.
+
+Two habits came out of it, both cheap:
+
+- **Reproduce the refusal without a credential.** A throwaway database, a registered writer, a ticket scoped to the patch, the runtime markers removed: the same `MISSING_RUNTIME_SESSION_ID` comes back, the log grows by one line, and the counters show nothing was written. The same submit without the ticket is refused outright with `FORBIDDEN_OP`.
+- **After editing an identity file, start a new process and ask.** What are you called, what am I called, how do you sign? A change only the current process believes in is not a change.
+
+The general question is the one this plugin exists to make answerable: not "did it block?" but "what would I read, in a week, without trusting the agent's account of itself?"
+
 ## Threat model
 
 - **What it catches.** The plugin catches an agent that misremembers or invents a user decision and writes it into memory or a skill.
