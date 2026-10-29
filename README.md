@@ -347,7 +347,9 @@ The strength of the proof is set by **when a Bitcoin block confirms it**, not by
 
 Stamping one minute before publishing strengthens nothing: the block may land after the post, and then the confirmed time is later than the publication, so priority is not established — only integrity is. For ordinary posts integrity is enough and the fast order is fine. Any claim of "we had this first" has to use the slow order, and saying which one applies is the difference between a checkable sentence and a story.
 
-A second mode uses the same machinery for material that is *not* ready to publish — `--private` keeps the body on disk only (`shiqing-state/priority/<date>_<label>/`), submits nothing but the digest to the calendars, and refuses to write a body that git would ever pick up. When that stamp confirms, the priority claim is locked even if the finding is never published, and whether to publish at all becomes a separate decision made later.
+A second mode uses the same machinery for material that is *not* ready to publish — `--private` keeps the body on disk only (`~/.provenance-gate/priority/<date>_<label>/`), submits nothing but the digest to the calendars, and refuses to write a body that git would ever pick up. When that stamp confirms, the priority claim is locked even if the finding is never published, and whether to publish at all becomes a separate decision made later.
+
+Those directories are a convention in the examples, not a default in the code: `--out` is required, nothing is written outside the directory you name, and an anchor recorded somewhere else keeps verifying where it already sits.
 
 Per post:
 
@@ -357,7 +359,7 @@ python self_anchor/self_anchor.py body.txt --out anchored/<status_id> --platform
 #   -> anchored/<status_id>/{body.txt, body.txt.ots, manifest.json}
 
 # same, for a finding that stays unpublished (body never leaves the machine):
-python self_anchor/self_anchor.py finding.md --out ~/shiqing-state/priority/findings-2026-10-25 \
+python self_anchor/self_anchor.py finding.md --out ~/.provenance-gate/priority/findings-2026-10-25 \
     --private --ref findings-2026-10-25
 #   -> that directory (git-ignored, only the digest is sent)
 

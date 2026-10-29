@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.8 — 2026-10-29
+
+**Removed two path constants that nothing read, and the last of one directory name out of the docs.**
+
+`self_anchor.py` carried `ROOT` and `PRIVATE_ROOT`, both pointing at a fixed directory under the home
+directory. Neither was referenced anywhere in the package — `--out` is required and the tool writes
+only where you point it. They are gone rather than renamed, because a constant nobody reads is a
+claim about behaviour that is not true. The comment in `assert_not_in_git` no longer names a
+particular checkout.
+
+The example paths in the README and in the `verify_self_anchor.js` header now point at
+`~/.provenance-gate/{state,priority}/`. These are examples, not defaults: nothing in the code chooses
+a directory, so an anchor recorded under any earlier path keeps verifying where it already sits.
+
+Checked before release: the only test module that touches these files, `tests/test_self_anchor.py`,
+passes, the CLI still comes up (`--help`), the JS still parses (`node --check`), and real anchors
+stamped earlier re-verify end to end — body bytes → digest → merkle root → block header, three
+confirmed blocks (973040, 973046, 973077), `RESULT verified`, on two different anchors.
+The full 819-test suite was not run to completion here: the performance and corpus modules take
+longer than this change is worth, and neither imports `self_anchor`.
+
 ## 0.1.7 — 2026-10-28
 
 **Changed: both scripts look for `ots-cli.js` the same way — `OTS_JS`, else Node's module resolution.**

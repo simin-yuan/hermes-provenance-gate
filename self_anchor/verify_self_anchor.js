@@ -2,7 +2,7 @@
 /**
  * One command: verify a self-anchored post.
  *
- *   node verify_self_anchor.js ~/shiqing-state/self_anchor/2026-10-25_x_2114253846482665752
+ *   node verify_self_anchor.js ~/.provenance-gate/state/2026-10-25_x_2114253846482665752
  *
  * Checks, in order, and prints each result:
  *   1. sha256(body.txt) bytes  ==  manifest.digest           (nothing drifted)
