@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-10-30
+
+**Documentation only — no runtime change.** The DEUSPROOF case note no longer quotes the auditing
+agent's handle when describing the duplicate-handle finding; the finding is about a write path that
+carries no identity, and the handle added nothing to it.
+
+The signed case files (`cases/deusproof-3308/*.json`) are unchanged, byte for byte. What the
+OpenTimestamps anchor covers is the string `prompt_hash:output_hash:id`, and the signatures cover
+the certificate body — none of them covers this README, which is why editing prose was safe and
+editing those files would not have been.
+
+Verified after the fact on both a pinned Hermes (`b4170e7`) and current `main` on Python 3.11–3.14:
+831 tests, 825 passed, 6 xfailed, 0 failed.
+
 ## 0.2.0 — 2026-10-30
 
 **New: `HERMES_GUARD_MODE` — one key that turns this plugin and its two siblings down together.**
