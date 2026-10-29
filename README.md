@@ -20,6 +20,28 @@ What is checked is narrower than "the user said it". See [What is checked](#what
 Upstream references below are to Hermes commit
 [`b4170e73b0bbd74b47dc567c36166d749c069699`](https://github.com/NousResearch/hermes-agent/tree/b4170e73b0bbd74b47dc567c36166d749c069699).
 
+## Modes
+
+`observe` records; `act` enforces. One key sets that for the whole family, and each plugin still
+answers to its own key first.
+
+| Plugin | Own key | Shared key `HERMES_GUARD_MODE` | In `observe` | In `act` |
+|---|---|---|---|---|
+| degeneracy-guard | `DEGENERACY_GUARD_MODE` — `observe` \| `act` | `observe` / `act` | same detection and incident record; replaces nothing, asks nothing | flagged output replaced with a notice; a loop-shaped tool call goes to the approval gate |
+| provenance-gate | `PROVENANCE_GATE_MODE` — `observe` \| `ask` \| `block` | `observe` / `act` (= `block`); `ask` stays `ask` | writes recorded as `would_block`, nothing refused | the write is refused with instructions |
+| skill-lineage | none | **no effect here** — records only, nothing to refuse | records every skill write | records every skill write |
+
+Precedence: a plugin's own key wins, `HERMES_GUARD_MODE` is the fallback, and with neither set each
+plugin keeps its own default. A spelling a key does not recognise is not an opinion — it falls
+through to the next source rather than being guessed at, so an empty or misspelled setting never
+changes a posture on its own.
+
+This plugin is the second row. `act` and `block` are the same thing here: the shared key spells
+enforcement `act`, and this plugin has always spelled it `block`. `ask` keeps its own meaning
+whichever key names it — it escalates to the approval gate instead of refusing. The plugin's own key
+keeps its published vocabulary exactly, so `PROVENANCE_GATE_MODE=act` is still a word it does not
+recognise and still falls through to the shared key, as it did before the shared key existed.
+
 ## Worked example
 
 These are end-to-end tests (`tests/test_e2e_hermes.py`): a real Hermes agent against a fake model server.
