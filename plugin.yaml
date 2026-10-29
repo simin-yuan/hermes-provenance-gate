@@ -8,7 +8,12 @@ description: >-
   the decision and does not drop a negation. Three modes — observe (the default: records them as
   would_block and never refuses), ask (escalates to the human-approval gate with a rule_key
   provenance-gate:<reason>, so "always" applies to one class of finding rather than to every write) and
-  block (refuses them with instructions). Follows the Hermes plugin verdict convention v0.1.1
+  block (refuses them with instructions). All three are also reachable through HERMES_GUARD_MODE, the
+  single key this plugin shares with its siblings in the family, where enforcement is spelled `act`.
+  PROVENANCE_GATE_MODE takes precedence whenever it holds one of its own three words, because a
+  per-plugin setting is the more specific one; a value it does not recognise is treated as no opinion
+  and the family key decides, which is why upgrading cannot change a mode on its own.
+  Follows the Hermes plugin verdict convention v0.1.1
   (docs/verdict-convention.md, v0.1.1) and emits no directive at all in observe mode.
   Disclosure — keeps a local copy of the text of user messages with their sender_id and session link
   (30-day default retention, `hermes provenance-gate purge`) and an evidence log under
