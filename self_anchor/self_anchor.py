@@ -39,10 +39,6 @@ import shutil
 import subprocess
 import sys
 
-ROOT = pathlib.Path.home() / "shiqing-state" / "self_anchor"
-PRIVATE_ROOT = pathlib.Path.home() / "shiqing-state" / "priority"
-
-
 def resolve_ots_cli() -> pathlib.Path:
     """Where ots-cli.js is: $OTS_JS, else Node's own module lookup, else a hard stop.
 
@@ -77,9 +73,9 @@ RULE = ("sha256 over the exact UTF-8 bytes of the published body; "
 def assert_not_in_git(directory: pathlib.Path) -> None:
     """A private finding must never be committable by accident.
 
-    shiqing-state is itself a git repo pushed to a remote, so 'inside a work
-    tree' is true even for the right directory. The real test is whether git
-    would ever pick these bytes up: `git check-ignore` must say yes.
+    The state directory is often itself a git repo pushed to a remote, so
+    'inside a work tree' is true even for the right directory. The real test is
+    whether git would ever pick these bytes up: `git check-ignore` must say yes.
     """
     probe = directory / "body.txt"
     try:
