@@ -27,6 +27,18 @@ from .claims import PROSE, Claim
 
 GATED_TOOLS = ("memory", "skill_manage")
 MODE_BLOCK, MODE_OBSERVE, MODE_ASK = "block", "observe", "ask"
+#: The shared vocabulary. `act` is what `block` has always meant; keeping both names means a user
+#: can set one key across plugins that each spell enforcement differently.
+MODE_ACT = MODE_BLOCK
+SHARED_ENV = "HERMES_GUARD_MODE"
+#: Two tables, not one. The plugin's own key keeps its published vocabulary exactly —
+#: ``observe``/``ask``/``block`` — so ``PROVENANCE_GATE_MODE=act`` stays what it was before the shared
+#: key existed: a word this plugin does not know, which falls through to the next source. The family
+#: key speaks the family's vocabulary, where the enforcement setting is spelled ``act``.
+#: Keyed by literal spelling on purpose: ``MODE_ACT`` *is* ``"block"``, so a table keyed by the
+#: constants would silently lose the ``act`` word.
+_OWN_WORDS = {MODE_OBSERVE: MODE_OBSERVE, MODE_ASK: MODE_ASK, MODE_BLOCK: MODE_BLOCK}
+_SHARED_WORDS = {MODE_OBSERVE: MODE_OBSERVE, MODE_ASK: MODE_ASK, "act": MODE_BLOCK, "block": MODE_BLOCK}
 SEARCH_SESSION, SEARCH_PROFILE = "session", "profile"
 RETRY_LIMIT = 3
 CLAIM_PREVIEW = 160
@@ -48,10 +60,19 @@ _REASON_ORDER = (REASON_NEGATED, REASON_QUESTION, REASON_UNRELATED, REASON_TOO_S
 
 def mode() -> str:
     """``observe`` (the default: flag and log, never refuse), ``ask`` (escalate to the approval gate) or
-    ``block`` (refuse outright). Both actions are opt-in; nothing that runs unattended changes posture
-    on its own."""
-    value = os.environ.get("PROVENANCE_GATE_MODE", "").strip().lower()
-    return value if value in (MODE_BLOCK, MODE_ASK) else MODE_OBSERVE
+    ``block`` (refuse outright — spelled ``act`` in the vocabulary shared with the other plugins).
+
+    ``PROVENANCE_GATE_MODE`` is read first, and keeps its published vocabulary of
+    ``observe``/``ask``/``block``, so an existing configuration keeps behaving exactly as it did
+    before the shared key existed. ``HERMES_GUARD_MODE`` is the fallback: one value across the
+    plugin family, where enforcement is spelled ``act``. A word either key does not recognise is
+    treated as no opinion at all — it falls through to the next source instead of being guessed at —
+    so empty and misspelled settings end on ``observe``, and nothing that runs unattended changes
+    posture on its own."""
+    own = os.environ.get("PROVENANCE_GATE_MODE", "").strip().lower()
+    if own in _OWN_WORDS:
+        return _OWN_WORDS[own]
+    return _SHARED_WORDS.get(os.environ.get(SHARED_ENV, "").strip().lower(), MODE_OBSERVE)
 
 
 def scope() -> str:
