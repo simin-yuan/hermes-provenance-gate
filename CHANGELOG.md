@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.0 — 2026-10-30
+
+**New: `HERMES_GUARD_MODE` — one key that turns this plugin and its two siblings down together.**
+
+`PROVENANCE_GATE_MODE` keeps its published vocabulary exactly — `observe` / `ask` / `block` — and its
+precedence, so no existing configuration changes behaviour on upgrade. `HERMES_GUARD_MODE` is the
+fallback, spelled in the family's words, where enforcement is `act`.
+
+`act` and `block` are one setting under two names here. `ask` keeps its own meaning whichever key
+names it: it escalates to the approval gate with a per-reason `rule_key` instead of refusing.
+
+Two lookup tables rather than one, on purpose. A word this plugin's own key does not recognise has
+always meant "no opinion, ask the next source", which is why `PROVENANCE_GATE_MODE=act` still
+resolves to `observe`. Teaching the own key the family spelling would have turned every such install
+into `block` during an upgrade nobody asked for.
+
+The README now opens with a `Modes` table written verbatim the same in `degeneracy-guard` and
+`skill-lineage`, so one look says what posture the whole family is in at that moment.
+
+Tests: 12 added in `tests/test_guard_mode.py`, covering own-key precedence, fall-through on
+unrecognised words, and empty settings landing on `observe`.
+
+
 ## 0.1.8 — 2026-10-29
 
 **Removed two path constants that nothing read, and the last of one directory name out of the docs.**
@@ -20,6 +43,7 @@ stamped earlier re-verify end to end — body bytes → digest → merkle root �
 confirmed blocks (973040, 973046, 973077), `RESULT verified`, on two different anchors.
 The full 819-test suite was not run to completion here: the performance and corpus modules take
 longer than this change is worth, and neither imports `self_anchor`.
+
 
 ## 0.1.7 — 2026-10-28
 
