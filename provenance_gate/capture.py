@@ -73,7 +73,9 @@ _DISCORD_NOTE = re.compile(r"\A\[Triggering message id: `[^`\n]*` — use as `me
 _REPLY_START = re.compile(r'\A\[Replying to(?: your previous message)?: "')
 _REPLY_END = '"]\n\n'
 _SENT_NOTE = re.compile(r"\A\[(?:The user sent |voice message could not be transcribed)[^\n]*\](?:\n\n|\Z)")
-_IMAGE_NOTE_START = "[The user sent an image~ Here's what I can see:\n"
+_IMAGE_NOTE_START = re.compile(
+    r"\A\[The user sent an image~ Here's what I can see(?: \([^)\n]*\))?:\n"
+)
 _IMAGE_NOTE_END = re.compile(r"\[If you need a closer look, use vision_analyze with image_url: [^\n]* ~\](?:\n\n|\Z)")
 _STT_EMPTY = re.compile(r"\A\[[^\n\]]*empty or inaudible[^\n]*\](?:\n\n|\Z)")
 _SLACK_NOTICE = re.compile(r"\A\[Slack attachment notice\]\n(?:- [^\n]*(?:\n|\Z))*\n?")
@@ -185,7 +187,7 @@ def typed_text(text: str) -> str:
         if _REPLY_START.match(text):
             cut = text.rfind(_REPLY_END)
             text = text[cut + len(_REPLY_END):] if cut != -1 else ""
-        if text.startswith(_IMAGE_NOTE_START):
+        if _IMAGE_NOTE_START.match(text):
             ends = list(_IMAGE_NOTE_END.finditer(text))
             text = text[ends[-1].end():] if ends else ""
         text = _SENT_NOTE.sub("", text, count=1)
